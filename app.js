@@ -885,25 +885,8 @@ async function syncGoogleSheetRealtime(silent = false) {
 function changeSheetLink() {
   const defaultUrl = 'https://docs.google.com/spreadsheets/d/1n__ebFqgiGQSIEh0xncDCvxYcInsbVQQc0TbSQndz70/edit?gid=772669565';
   const currentUrl = localStorage.getItem('custom_sheet_url') || defaultUrl;
-  const newUrl = prompt('Nhập link Google Sheet mới của bạn để đổi nguồn dữ liệu:', currentUrl);
-  if (newUrl === null) return;
-  
-  const trimmed = newUrl.trim();
-  if (trimmed === '' || trimmed === defaultUrl) {
-    localStorage.removeItem('custom_sheet_url');
-    alert('Đã khôi phục về link Google Sheet mặc định!');
-    syncGoogleSheetRealtime(false);
-  } else {
-    let sheetHost = '';
-    try { sheetHost = new URL(trimmed).hostname; } catch (e) { sheetHost = ''; }
-    if (sheetHost !== 'docs.google.com' || !trimmed.includes('/spreadsheets/')) {
-      alert('Đường dẫn không hợp lệ! Chỉ chấp nhận link Google Sheet (docs.google.com).');
-      return;
-    }
-    localStorage.setItem('custom_sheet_url', trimmed);
-    alert('Đã đổi nguồn link Google Sheet thành công! Hệ thống sẽ tiến hành tải dữ liệu realtime ngay lập tức.');
-    syncGoogleSheetRealtime(false);
-  }
+  window.open(currentUrl, '_blank');
+
 }
 
 function processAndApplyWorkbook(workbook) {
@@ -968,23 +951,23 @@ function processAndApplyWorkbook(workbook) {
   const fines = [];
   for (let i = 1; i < fRows.length; i++) {
     const row = fRows[i] || [];
-    const plate = row[3]; // col 4 is BKS
+    const plate = row[4]; // col E is BKS
     if (!plate) continue;
-    fines.push({
+      fines.push({
       reportDate: ser(row[0]),
       plate: ser(plate),
-      depot: ser(row[4]),
-      violationTime: ser(row[5]),
-      location: ser(row[6]),
-      violation: ser(row[7]),
-      cost: ser(row[8]),
-      sup: ser(row[10]),
-      driverId: ser(row[11]),
-      driverName: ser(row[12]),
-      driverStatus: ser(row[13]),
-      expectedDate: ser(row[14]),
-      progress: ser(row[16]),
-    });
+      depot: ser(row[5]),
+      violationTime: ser(row[7]),
+      location: ser(row[9]),
+      violation: ser(row[10]),
+      cost: ser(row[11]),
+      sup: ser(row[13]),
+      driverId: ser(row[14]),
+      driverName: ser(row[15]),
+      driverStatus: ser(row[16]),
+      expectedDate: ser(row[17]),
+      progress: ser(row[19]),    
+  });
   }
 
   // 4. EFFICIENCY (Hiệu suất sử dụng xe)
