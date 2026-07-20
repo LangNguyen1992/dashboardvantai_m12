@@ -41,6 +41,7 @@ function escapeHTML(str) {
 // === HELPERS ===
 function fmt(n) { return new Intl.NumberFormat('vi-VN').format(Math.round(n)); }
 function fmtM(n) { return (n/1000000).toFixed(1) + 'M'; }
+function parseCost(v) { if (typeof v === 'number') return v; if (typeof v === 'string') { const c = v.replace(/[^0-9]/g, ''); return c ? parseInt(c, 10) : 0; } return 0; }
 Chart.defaults.color = '#555770';
 Chart.defaults.borderColor = 'rgba(0,0,0,0.06)';
 Chart.defaults.font.family = 'Inter';
@@ -93,7 +94,7 @@ function renderDashboard() {
   const pendingFines = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
   const avgEff = e.length ? (e.reduce((s,x) => s + x.efficiency, 0) / e.length).toFixed(1) : 0;
   const reinfOK = rf.filter(x => x.status === 'Có xe').length;
-  const totalFineCost = f.reduce((s,x) => s + (typeof x.cost === 'number' ? x.cost : 0), 0);
+  const totalFineCost = f.reduce((s,x) => s + (parseCost(x.cost)), 0);
 
   // Count expiring items
   let expiringCount = 0;
@@ -313,7 +314,7 @@ function renderFines() {
   const pending = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
   const processing = f.filter(x => x.progress === 'Đang Xử Lý Với Tài Xế').length;
   const done = f.filter(x => x.progress === 'Tạo eform hoàn ứng').length;
-  const totalCost = f.reduce((s,x) => s + (typeof x.cost === 'number' ? x.cost : 0), 0);
+  const totalCost = f.reduce((s,x) => s + (parseCost(x.cost)), 0);
 
   document.getElementById('finesKPIs').innerHTML = makeKPI([
     {l:'Tổng vụ', v:f.length, c:'blue', i:'🚨'},
@@ -344,7 +345,7 @@ function renderFinesTable() {
       <td>${escapeHTML(x.violationTime||'')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${escapeHTML(x.location||'')}">${escapeHTML(x.location||'')}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis" title="${escapeHTML(x.violation||'')}">${escapeHTML(x.violation||'')}</td>
-      <td style="font-weight:600">${x.cost ? fmt(x.cost)+'₫' : ''}</td>
+      <td style="font-weight:600">${x.cost ? fmt(parseCost(x.cost))+'₫' : ''}</td>
       <td>${escapeHTML(x.driverName||'')}</td>
       <td><span class="status ${escapeHTML(dCls)}">${escapeHTML(x.driverStatus||'')}</span></td>
       <td>${escapeHTML(x.sup||'')}</td>
