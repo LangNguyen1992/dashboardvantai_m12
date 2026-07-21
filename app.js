@@ -1,3 +1,4 @@
+
 // === NAVIGATION ===
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -770,6 +771,15 @@ function ser(val) {
   return s;
 }
 
+// Chuẩn hóa số điện thoại: khôi phục số 0 đầu bị mất khi Sheet đọc SĐT dưới dạng số
+function serPhone(val) {
+  let s = ser(val);
+  if (s === null || s === undefined) return s;
+  s = String(s).replace(/\s|\.|-/g, '');
+  if (/^\d{9}$/.test(s)) s = '0' + s; // 9 chữ số -> thêm 0 đầu (SĐT di động VN 10 số)
+  return s;
+}
+
 function loadCachedFullData() {
   try {
     const cached = localStorage.getItem('cached_full_data');
@@ -1020,17 +1030,17 @@ function processAndApplyWorkbook(workbook) {
       stt: ser(row[0]),
       employeeId: ser(row[1]),
       name: ser(name),
-      phone: ser(row[3]),
-      position: ser(row[4]),
-      unit: ser(row[5]),
-      supervisor: ser(row[6]),
-      shift: ser(row[7]),
-      route: ser(row[8]),
-      startDate: ser(row[9]),
-      endDate: ser(row[10]),
-      status: ser(row[11]),
-      seniority: ser(row[12]),
-      seniorityDetail: ser(row[13]),
+      phone: serPhone(row[3]),      // SĐT (cột D) - khôi phục số 0 đầu
+      position: ser(row[13]),       // Vị trí (cột N)
+      unit: ser(row[14]),           // Đơn vị (cột O)
+      supervisor: ser(row[15]),     // Quản lý trực tiếp (cột P)
+      shift: ser(row[16]),          // Ca làm (cột Q)
+      route: ser(row[17]),          // Tuyến chạy (cột R)
+      startDate: ser(row[18]),      // Ngày vào làm (cột S)
+      endDate: ser(row[19]),        // Ngày nghỉ việc (cột T)
+      status: ser(row[20]),         // Tình trạng (cột U)
+      seniority: ser(row[21]),      // Thâm niên (cột V)
+      seniorityDetail: ser(row[22]),// Thâm niên 1 (cột W)
     });
   }
 
