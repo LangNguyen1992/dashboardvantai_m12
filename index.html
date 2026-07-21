@@ -31,6 +31,9 @@
         <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">
           <span class="nav-icon">📊</span> Dashboard
         </a>
+        <a class="nav-item" data-page="assessment" onclick="navigateTo('assessment')">
+          <span class="nav-icon">📈</span> Đánh giá & Cải thiện
+        </a>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">Quản lý xe</div>
@@ -133,6 +136,48 @@
             <div class="chart-title"><span class="dot" style="background:var(--cyan)"></span> Phân bổ tuyến theo NCC
             </div>
             <canvas id="chartDashSupplier"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PAGE: ĐÁNH GIÁ & CẢI THIỆN ============ -->
+      <div class="page" id="page-assessment">
+        <div class="table-card">
+          <div class="table-header">
+            <h3>📈 Đánh giá tự động theo chỉ số</h3>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Chỉ tiêu</th>
+                  <th>Hiện tại</th>
+                  <th>Mục tiêu</th>
+                  <th>Trạng thái</th>
+                  <th>Nhận xét</th>
+                </tr>
+              </thead>
+              <tbody id="assessmentContent"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header">
+            <h3>✅ Công việc cần làm để cải thiện</h3>
+            <span id="actionProgress" style="font-size:13px;color:var(--text-secondary);font-weight:600"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Xong</th>
+                  <th>Ưu tiên</th>
+                  <th>Hạng mục</th>
+                  <th>Việc cần làm (bấm vào dòng để đánh dấu hoàn thành)</th>
+                </tr>
+              </thead>
+              <tbody id="actionItemsBody"></tbody>
+            </table>
           </div>
         </div>
       </div>

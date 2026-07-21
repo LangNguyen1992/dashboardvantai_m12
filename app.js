@@ -8,7 +8,8 @@ function navigateTo(page) {
   const titles = {
     dashboard:'📊 Dashboard Tổng quan', vehicles:'🚛 Thông tin xe', schedule:'📋 Lịch Tải',
     fines:'🚨 Phạt Nguội', efficiency:'📊 Hiệu suất xe', staff:'👥 Nhân sự',
-    reinforcement:'📦 Tăng cường Lấy', ontime:'⏱️ Ontime xe tải', btbd:'🔧 Bảo trì - Sửa chữa (BTBD)'
+    reinforcement:'📦 Tăng cường Lấy', ontime:'⏱️ Ontime xe tải', btbd:'🔧 Bảo trì - Sửa chữa (BTBD)',
+    assessment:'📈 Đánh giá & Cải thiện'
   };
   document.getElementById('pageTitle').textContent = titles[page] || '';
   if (page === 'dashboard' && !window._dashChartsRendered) { renderDashboardCharts(); window._dashChartsRendered = true; }
@@ -78,6 +79,100 @@ function makeKPI(cards) {
 function populateSelect(id, values) {
   const sel = document.getElementById(id);
   if (sel.options.length <= 1) values.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+}
+
+// ==================== PAGE: ĐÁNH GIÁ & CẢI THIỆN ====================
+const ACTION_ITEMS = [
+  { id: 'eff',      p: 'Cao',  area: 'Hiệu suất xe', task: 'Xác minh định nghĩa & nâng hiệu suất sử dụng xe lên ≥70% (gộp tuyến, cắt/luân chuyển xe dư).' },
+  { id: 'docs',     p: 'Cao',  area: 'Tuân thủ',     task: 'Xử lý dứt điểm giấy tờ xe sắp/hết hạn — phân công SUP theo deadline (số ngày còn lại).' },
+  { id: 'fines',    p: 'Cao',  area: 'Phạt nguội',   task: 'Đóng dứt điểm các phạt nguội tồn, theo dõi tiến độ theo SUP phụ trách.' },
+  { id: 'turnover', p: 'Cao',  area: 'Nhân sự',      task: 'Phân tích lý do nghỉ việc theo tháng, đề ra giải pháp giữ chân tài xế.' },
+  { id: 'reinf',    p: 'TB',   area: 'Điều phối',    task: 'Nâng tỷ lệ đáp ứng yêu cầu tăng cường lên ≥90% (điều phối NCC).' },
+  { id: 'source',   p: 'TB',   area: 'Dữ liệu',      task: 'Chuẩn hóa một nguồn số xe chuẩn (thống nhất tổng đội xe giữa các sheet).' },
+  { id: 'cost',     p: 'TB',   area: 'Chi phí',      task: 'Bổ sung chỉ số chi phí: đồng/km, chi phí BTBD theo xe, phạt theo SUP/đội.' },
+  { id: 'trend',    p: 'Thấp', area: 'Phân tích',    task: 'Lưu dữ liệu theo thời gian để theo dõi xu hướng (hiệu suất, nghỉ việc, ontime, phạt).' },
+  { id: 'privacy',  p: 'Thấp', area: 'Bảo mật',      task: 'Bảo vệ dữ liệu nhân sự nhạy cảm (người thân, STK ngân hàng, địa chỉ).' },
+];
+
+function renderAssessment() {
+  const el = document.getElementById('assessmentContent');
+  if (!el) return;
+  const v = DATA.vehicles || [], d = DATA.drivers || [], e = DATA.efficiency || [], f = DATA.fines || [], rf = DATA.reinforcement || [];
+
+  const totalVeh = v.length, activeVeh = v.filter(x => x.status === 'Hoạt động').length;
+  const activePct = totalVeh ? activeVeh / totalVeh * 100 : 0;
+  const opVeh = e.filter(x => x.opStatus === 'Đang vận hành');
+  const avgEff = opVeh.length ? opVeh.reduce((s, x) => s + (Number(x.efficiency) || 0), 0) / opVeh.length : 0;
+  const totalStaff = d.length, resigned = d.filter(x => x.status === 'Đã nghỉ việc').length;
+  const resignPct = totalStaff ? resigned / totalStaff * 100 : 0;
+  let expiring = 0;
+  v.forEach(x => { ['inspectionExpiry', 'liabilityExpiry', 'roadFeeExpiry', 'badgeExpiry'].forEach(fld => { const st = isExpiringSoon(x[fld]); if (st === 'expired' || st === 'critical') expiring++; }); });
+  const pendingFines = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
+  const reinfOK = rf.filter(x => x.status === 'Có xe').length;
+  const reinfPct = rf.length ? reinfOK / rf.length * 100 : 0;
+
+  const rows = [
+    { l: 'Hiệu suất sử dụng xe (TB xe đang vận hành)', val: avgEff.toFixed(1) + '%', tgt: '≥ 70%',
+      st: avgEff >= 70 ? 'good' : avgEff >= 50 ? 'warn' : 'bad',
+      note: avgEff < 50 ? 'Rất thấp — xác minh cách đo & tối ưu đội xe (gộp tuyến, cắt xe dư).' : 'Theo dõi, hướng tới mục tiêu.' },
+    { l: 'Tỷ lệ xe hoạt động', val: activePct.toFixed(1) + '% (' + activeVeh + '/' + totalVeh + ')', tgt: '≥ 90%',
+      st: activePct >= 90 ? 'good' : activePct >= 80 ? 'warn' : 'bad',
+      note: activePct >= 90 ? 'Đạt mức tốt.' : 'Rà soát xe ngừng hoạt động.' },
+    { l: 'Tỷ lệ nghỉ việc (lũy kế)', val: resignPct.toFixed(1) + '% (' + resigned + '/' + totalStaff + ')', tgt: '≤ 20%',
+      st: resignPct <= 20 ? 'good' : resignPct <= 30 ? 'warn' : 'bad',
+      note: resignPct > 30 ? 'Cao — phân tích lý do nghỉ theo tháng, giải pháp giữ chân.' : 'Theo dõi biến động nhân sự.' },
+    { l: 'Giấy tờ xe hết/sắp hết hạn (≤30 ngày)', val: expiring + ' mục', tgt: '0 mục',
+      st: expiring === 0 ? 'good' : expiring <= 10 ? 'warn' : 'bad',
+      note: expiring > 0 ? 'Rủi ro tuân thủ — phân công xử lý theo deadline.' : 'Không có mục quá hạn.' },
+    { l: 'Phạt nguội chưa xử lý', val: pendingFines + ' vụ', tgt: '0 vụ',
+      st: pendingFines === 0 ? 'good' : pendingFines <= 5 ? 'warn' : 'bad',
+      note: pendingFines > 0 ? 'Cần dứt điểm, theo dõi theo SUP phụ trách.' : 'Đã xử lý hết.' },
+    { l: 'Tỷ lệ đáp ứng tăng cường', val: reinfPct.toFixed(1) + '% (' + reinfOK + '/' + rf.length + ')', tgt: '≥ 90%',
+      st: reinfPct >= 90 ? 'good' : reinfPct >= 75 ? 'warn' : 'bad',
+      note: reinfPct < 90 ? 'Cải thiện điều phối NCC để đủ xe.' : 'Đáp ứng tốt.' },
+  ];
+  const badge = st => st === 'good' ? '<span class="status completed">🟢 Đạt</span>'
+    : st === 'warn' ? '<span class="status delayed">🟡 Cần chú ý</span>'
+    : '<span class="status breakdown">🔴 Chưa đạt</span>';
+  el.innerHTML = rows.map(r => `<tr>
+      <td style="font-weight:600;color:var(--text-primary)">${escapeHTML(r.l)}</td>
+      <td>${escapeHTML(r.val)}</td>
+      <td>${escapeHTML(r.tgt)}</td>
+      <td>${badge(r.st)}</td>
+      <td>${escapeHTML(r.note)}</td>
+    </tr>`).join('');
+
+  renderActionItems();
+}
+
+function getActionDone() {
+  try { return JSON.parse(localStorage.getItem('assessment_done') || '[]'); } catch (e) { return []; }
+}
+function renderActionItems() {
+  const el = document.getElementById('actionItemsBody');
+  if (!el) return;
+  const done = getActionDone();
+  const pri = p => p === 'Cao' ? '<span class="status breakdown">Cao</span>'
+    : p === 'TB' ? '<span class="status delayed">Trung bình</span>'
+    : '<span class="status completed">Thấp</span>';
+  el.innerHTML = ACTION_ITEMS.map(a => {
+    const isDone = done.includes(a.id);
+    return `<tr style="cursor:pointer;${isDone ? 'opacity:0.55' : ''}" onclick="toggleActionItem('${a.id}')">
+      <td style="text-align:center;font-size:16px">${isDone ? '✅' : '⬜'}</td>
+      <td>${pri(a.p)}</td>
+      <td>${escapeHTML(a.area)}</td>
+      <td style="${isDone ? 'text-decoration:line-through;color:var(--text-muted)' : 'font-weight:500;color:var(--text-primary)'}">${escapeHTML(a.task)}</td>
+    </tr>`;
+  }).join('');
+  const doneCount = ACTION_ITEMS.filter(a => done.includes(a.id)).length;
+  const prog = document.getElementById('actionProgress');
+  if (prog) prog.textContent = 'Hoàn thành ' + doneCount + '/' + ACTION_ITEMS.length;
+}
+function toggleActionItem(id) {
+  let done = getActionDone();
+  if (done.includes(id)) done = done.filter(x => x !== id); else done.push(id);
+  localStorage.setItem('assessment_done', JSON.stringify(done));
+  renderActionItems();
 }
 
 // ==================== PAGE 0: DASHBOARD TỔNG QUAN ====================
@@ -1209,6 +1304,7 @@ function processAndApplyWorkbook(workbook) {
   renderReinforcement();
   renderOntime();
   renderBTBD();
+  renderAssessment();
 
   destroyAllCharts();
   navigateTo(pageName);
@@ -1257,6 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderReinforcement();
   renderOntime();
   renderBTBD();
+  renderAssessment();
 
   // Tự động lấy dữ liệu realtime khi tải trang (chế độ chạy ngầm không hiện thông báo thành công)
   setTimeout(() => {
