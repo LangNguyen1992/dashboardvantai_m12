@@ -34,6 +34,12 @@
         <a class="nav-item" data-page="assessment" onclick="navigateTo('assessment')">
           <span class="nav-icon">📈</span> Đánh giá & Cải thiện
         </a>
+        <a class="nav-item" data-page="cost" onclick="navigateTo('cost')">
+          <span class="nav-icon">💰</span> Chi phí
+        </a>
+        <a class="nav-item" data-page="trends" onclick="navigateTo('trends')">
+          <span class="nav-icon">📉</span> Xu hướng
+        </a>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">Quản lý xe</div>
@@ -177,6 +183,66 @@
                 </tr>
               </thead>
               <tbody id="actionItemsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PAGE: CHI PHÍ ============ -->
+      <div class="page" id="page-cost">
+        <div class="kpi-grid" id="costKPIs"></div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--warning)"></span> Cơ cấu chi phí (BTBD vs Phạt)</div>
+            <canvas id="chartCostStructure"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Top 10 xe chi phí BTBD</div>
+            <canvas id="chartCostTopVeh"></canvas>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header"><h3>🔧 Top xe theo chi phí BTBD</h3></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>#</th><th>BKS</th><th>Số lượt vào xưởng</th><th>Tổng chi phí</th></tr></thead>
+              <tbody id="costTopVehBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header"><h3>🚨 Chi phí phạt nguội theo SUP</h3></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>SUP</th><th>Số vụ</th><th>Tổng tiền</th></tr></thead>
+              <tbody id="costBySupBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PAGE: XU HƯỚNG ============ -->
+      <div class="page" id="page-trends">
+        <div class="quick-alerts" style="background:rgba(59,130,246,0.06)">
+          <span class="alert-icon-sm">ℹ️</span>
+          <span class="alert-msg" id="trendNote">Đang tích lũy dữ liệu theo ngày...</span>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Xu hướng chỉ số vận hành (%)</div>
+            <canvas id="chartTrendKPI"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--warning)"></span> Xu hướng chi phí (triệu đ)</div>
+            <canvas id="chartTrendCost"></canvas>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header"><h3>📅 Lịch sử chỉ số theo ngày</h3></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Ngày</th><th>Hiệu suất</th><th>Xe hoạt động</th><th>Nghỉ việc</th><th>Phạt chờ</th><th>Phạt (đ)</th><th>BTBD (đ)</th></tr></thead>
+              <tbody id="trendTableBody"></tbody>
             </table>
           </div>
         </div>

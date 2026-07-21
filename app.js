@@ -9,7 +9,7 @@ function navigateTo(page) {
     dashboard:'📊 Dashboard Tổng quan', vehicles:'🚛 Thông tin xe', schedule:'📋 Lịch Tải',
     fines:'🚨 Phạt Nguội', efficiency:'📊 Hiệu suất xe', staff:'👥 Nhân sự',
     reinforcement:'📦 Tăng cường Lấy', ontime:'⏱️ Ontime xe tải', btbd:'🔧 Bảo trì - Sửa chữa (BTBD)',
-    assessment:'📈 Đánh giá & Cải thiện'
+    assessment:'📈 Đánh giá & Cải thiện', cost:'💰 Chi phí', trends:'📉 Xu hướng'
   };
   document.getElementById('pageTitle').textContent = titles[page] || '';
   if (page === 'dashboard' && !window._dashChartsRendered) { renderDashboardCharts(); window._dashChartsRendered = true; }
@@ -17,6 +17,8 @@ function navigateTo(page) {
   if (page === 'staff' && !window._staffChartsRendered) { renderStaffCharts(); window._staffChartsRendered = true; }
   if (page === 'ontime' && !window._ontimeChartsRendered) { renderOntimeCharts(); window._ontimeChartsRendered = true; }
   if (page === 'btbd' && !window._btbdChartsRendered) { renderBTBDCharts(); window._btbdChartsRendered = true; }
+  if (page === 'cost' && !window._costChartsRendered) { renderCostCharts(); window._costChartsRendered = true; }
+  if (page === 'trends' && !window._trendChartsRendered) { renderTrendCharts(); window._trendChartsRendered = true; }
 }
 
 // === CLOCK ===
@@ -173,6 +175,118 @@ function toggleActionItem(id) {
   if (done.includes(id)) done = done.filter(x => x !== id); else done.push(id);
   localStorage.setItem('assessment_done', JSON.stringify(done));
   renderActionItems();
+}
+
+// ==================== PAGE: CHI PHÍ ====================
+function renderCost() {
+  const b = DATA.btbd || [], f = DATA.fines || [];
+  const totalBTBD = b.reduce((s, x) => s + parseCost(x.cost), 0);
+  const totalFine = f.reduce((s, x) => s + parseCost(x.cost), 0);
+  const total = totalBTBD + totalFine;
+  const kpiEl = document.getElementById('costKPIs');
+  if (kpiEl) kpiEl.innerHTML = makeKPI([
+    { l: 'Tổng chi phí BTBD', v: fmt(totalBTBD) + '₫', c: 'orange', i: '🔧' },
+    { l: 'Số lượt vào xưởng', v: b.length, c: 'blue', i: '🏭' },
+    { l: 'Tổng phạt nguội', v: fmt(totalFine) + '₫', c: 'red', i: '🚨' },
+    { l: 'Tổng chi phí (BTBD+Phạt)', v: fmt(total) + '₫', c: 'purple', i: '💰' },
+  ]);
+  const byVeh = {};
+  b.forEach(x => { const pl = x.plate || 'N/A'; if (!byVeh[pl]) byVeh[pl] = { n: 0, c: 0 }; byVeh[pl].n++; byVeh[pl].c += parseCost(x.cost); });
+  const topVeh = Object.entries(byVeh).sort((a, b2) => b2[1].c - a[1].c).slice(0, 15);
+  const tvEl = document.getElementById('costTopVehBody');
+  if (tvEl) tvEl.innerHTML = topVeh.map(([pl, o], i) => `<tr><td>${i + 1}</td><td style="font-weight:600;color:var(--text-primary)">${escapeHTML(pl)}</td><td>${o.n}</td><td style="font-weight:600">${fmt(o.c)}₫</td></tr>`).join('');
+  const bySup = {};
+  f.forEach(x => { const su = x.sup || '(Chưa gán)'; if (!bySup[su]) bySup[su] = { n: 0, c: 0 }; bySup[su].n++; bySup[su].c += parseCost(x.cost); });
+  const supRows = Object.entries(bySup).sort((a, b2) => b2[1].c - a[1].c);
+  const bsEl = document.getElementById('costBySupBody');
+  if (bsEl) bsEl.innerHTML = supRows.map(([su, o]) => `<tr><td style="font-weight:600;color:var(--text-primary)">${escapeHTML(su)}</td><td>${o.n}</td><td style="font-weight:600">${fmt(o.c)}₫</td></tr>`).join('');
+}
+function renderCostCharts() {
+  destroyChartIfExists('chartCostStructure');
+  destroyChartIfExists('chartCostTopVeh');
+  const b = DATA.btbd || [], f = DATA.fines || [];
+  const totalBTBD = b.reduce((s, x) => s + parseCost(x.cost), 0);
+  const totalFine = f.reduce((s, x) => s + parseCost(x.cost), 0);
+  const sEl = document.getElementById('chartCostStructure');
+  if (sEl) new Chart(sEl, { type: 'doughnut', data: { labels: ['Chi phí BTBD', 'Phạt nguội'], datasets: [{ data: [totalBTBD, totalFine], backgroundColor: ['#f59e0b', '#ef4444'], borderWidth: 0, hoverOffset: 8 }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } } } });
+  const byVeh = {};
+  b.forEach(x => { const pl = x.plate || 'N/A'; byVeh[pl] = (byVeh[pl] || 0) + parseCost(x.cost); });
+  const top = Object.entries(byVeh).sort((a, b2) => b2[1] - a[1]).slice(0, 10);
+  const tEl = document.getElementById('chartCostTopVeh');
+  if (tEl) new Chart(tEl, { type: 'bar', data: { labels: top.map(t => t[0]), datasets: [{ label: 'Chi phí BTBD', data: top.map(t => t[1]), backgroundColor: '#f59e0b', borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } } });
+}
+
+// ==================== PAGE: XU HƯỚNG (lịch sử chỉ số theo ngày) ====================
+function computeMetricsSnapshot() {
+  const v = DATA.vehicles || [], d = DATA.drivers || [], e = DATA.efficiency || [], f = DATA.fines || [], rf = DATA.reinforcement || [], b = DATA.btbd || [];
+  const totalVeh = v.length, activeVeh = v.filter(x => x.status === 'Hoạt động').length;
+  const op = e.filter(x => x.opStatus === 'Đang vận hành');
+  const avgEff = op.length ? op.reduce((s, x) => s + (Number(x.efficiency) || 0), 0) / op.length : 0;
+  const totalStaff = d.length, resigned = d.filter(x => x.status === 'Đã nghỉ việc').length;
+  const pendingFines = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
+  const reinfOK = rf.filter(x => x.status === 'Có xe').length;
+  let expiring = 0;
+  v.forEach(x => { ['inspectionExpiry', 'liabilityExpiry', 'roadFeeExpiry', 'badgeExpiry'].forEach(fl => { const st = isExpiringSoon(x[fl]); if (st === 'expired' || st === 'critical') expiring++; }); });
+  return {
+    avgEff: Math.round(avgEff * 10) / 10,
+    activePct: totalVeh ? Math.round(activeVeh / totalVeh * 1000) / 10 : 0,
+    resignPct: totalStaff ? Math.round(resigned / totalStaff * 1000) / 10 : 0,
+    reinfPct: rf.length ? Math.round(reinfOK / rf.length * 1000) / 10 : 0,
+    expiring: expiring, pendingFines: pendingFines,
+    fineCost: f.reduce((s, x) => s + parseCost(x.cost), 0),
+    btbdCost: b.reduce((s, x) => s + parseCost(x.cost), 0),
+  };
+}
+function getMetricsHistory() { try { return JSON.parse(localStorage.getItem('metrics_history') || '{}'); } catch (e) { return {}; } }
+function captureHistorySnapshot() {
+  try {
+    if (!(DATA.vehicles && DATA.vehicles.length)) return; // không lưu khi chưa có dữ liệu
+    const hist = getMetricsHistory();
+    const today = new Date().toISOString().slice(0, 10);
+    hist[today] = computeMetricsSnapshot();
+    const keys = Object.keys(hist).sort();
+    while (keys.length > 120) { delete hist[keys.shift()]; }
+    localStorage.setItem('metrics_history', JSON.stringify(hist));
+  } catch (e) { console.warn('history capture', e); }
+}
+function renderTrends() {
+  const hist = getMetricsHistory();
+  const dates = Object.keys(hist).sort();
+  const note = document.getElementById('trendNote');
+  if (note) {
+    note.textContent = dates.length < 2
+      ? 'Đang tích lũy dữ liệu theo ngày — cần ít nhất 2 ngày để vẽ xu hướng (hiện có ' + dates.length + ' ngày). Dashboard tự lưu 1 điểm mỗi ngày khi đồng bộ.'
+      : 'Dữ liệu xu hướng từ ' + dates[0] + ' đến ' + dates[dates.length - 1] + ' (' + dates.length + ' ngày).';
+  }
+  const tb = document.getElementById('trendTableBody');
+  if (tb) tb.innerHTML = dates.slice().reverse().map(d => `<tr><td>${d}</td><td>${hist[d].avgEff}%</td><td>${hist[d].activePct}%</td><td>${hist[d].resignPct}%</td><td>${hist[d].pendingFines}</td><td>${fmt(hist[d].fineCost)}₫</td><td>${fmt(hist[d].btbdCost)}₫</td></tr>`).join('');
+}
+function renderTrendCharts() {
+  destroyChartIfExists('chartTrendKPI');
+  destroyChartIfExists('chartTrendCost');
+  const hist = getMetricsHistory();
+  const dates = Object.keys(hist).sort();
+  const labels = dates.map(d => d.slice(5));
+  const kEl = document.getElementById('chartTrendKPI');
+  if (kEl) new Chart(kEl, {
+    type: 'line', data: {
+      labels: labels, datasets: [
+        { label: 'Hiệu suất xe %', data: dates.map(d => hist[d].avgEff), borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+        { label: 'Đáp ứng tăng cường %', data: dates.map(d => hist[d].reinfPct), borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+        { label: 'Xe hoạt động %', data: dates.map(d => hist[d].activePct), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+        { label: 'Nghỉ việc %', data: dates.map(d => hist[d].resignPct), borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+      ]
+    }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { y: { ticks: { callback: v => v + '%' } } } }
+  });
+  const cEl = document.getElementById('chartTrendCost');
+  if (cEl) new Chart(cEl, {
+    type: 'line', data: {
+      labels: labels, datasets: [
+        { label: 'Phạt nguội (triệu đ)', data: dates.map(d => Math.round(hist[d].fineCost / 1000000 * 10) / 10), borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+        { label: 'Chi phí BTBD (triệu đ)', data: dates.map(d => Math.round(hist[d].btbdCost / 1000000 * 10) / 10), borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.3, fill: false, borderWidth: 2, pointRadius: 3 },
+      ]
+    }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } } }
+  });
 }
 
 // ==================== PAGE 0: DASHBOARD TỔNG QUAN ====================
@@ -825,7 +939,8 @@ function destroyAllCharts() {
     'chartDashVehicle', 'chartDashStaff', 'chartDashEfficiency',
     'chartDashReinf', 'chartDashSupplier', 'chartEfficiency', 'chartOpStatus',
     'chartPositions', 'chartDriverStatus', 'chartOntimeTrend', 'chartOntimeGroup',
-    'chartBTBDContent', 'chartBTBDTop'
+    'chartBTBDContent', 'chartBTBDTop',
+    'chartCostStructure', 'chartCostTopVeh', 'chartTrendKPI', 'chartTrendCost'
   ];
   chartIds.forEach(destroyChartIfExists);
 }
@@ -1259,6 +1374,7 @@ function processAndApplyWorkbook(workbook) {
         outDate: cellS(row, bMap, 'Ngày ra xưởng'),
         totalHours: cellS(row, bMap, 'Tổng giờ'),
         note: cellS(row, bMap, 'Ghi chú'),
+        cost: cellS(row, bMap, 'Chi phí'),
       });
     }
   }
@@ -1290,6 +1406,8 @@ function processAndApplyWorkbook(workbook) {
   window._staffChartsRendered = false;
   window._ontimeChartsRendered = false;
   window._btbdChartsRendered = false;
+  window._costChartsRendered = false;
+  window._trendChartsRendered = false;
 
   // Refresh current visible page
   const activePageItem = document.querySelector('.nav-item.active');
@@ -1304,7 +1422,10 @@ function processAndApplyWorkbook(workbook) {
   renderReinforcement();
   renderOntime();
   renderBTBD();
+  captureHistorySnapshot();
   renderAssessment();
+  renderCost();
+  renderTrends();
 
   destroyAllCharts();
   navigateTo(pageName);
@@ -1353,7 +1474,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderReinforcement();
   renderOntime();
   renderBTBD();
+  captureHistorySnapshot();
   renderAssessment();
+  renderCost();
+  renderTrends();
 
   // Tự động lấy dữ liệu realtime khi tải trang (chế độ chạy ngầm không hiện thông báo thành công)
   setTimeout(() => {
