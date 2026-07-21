@@ -46,6 +46,18 @@ function escapeHTML(str) {
 function fmt(n) { return new Intl.NumberFormat('vi-VN').format(Math.round(n)); }
 function fmtM(n) { return (n/1000000).toFixed(1) + 'M'; }
 function parseCost(v) { if (typeof v === 'number') return v; if (typeof v === 'string') { const c = v.replace(/[^0-9]/g, ''); return c ? parseInt(c, 10) : 0; } return 0; }
+// Trích tháng (YYYY-MM) từ ô ngày: hỗ trợ chuỗi DD/MM/YYYY, YYYY-MM-DD và số serial Excel
+function monthKeyFromDate(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number' || (/^\d+(\.\d+)?$/.test(String(v).trim()) && Number(v) > 20000)) {
+    const dt = new Date(Math.round((Number(v) - 25569) * 86400000));
+    return isNaN(dt) ? null : dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0');
+  }
+  const str = String(v).trim();
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + m[2].padStart(2, '0');
+  m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return m[1] + '-' + m[2].padStart(2, '0');
+  const dt = new Date(str); return isNaN(dt) ? null : dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+}
 Chart.defaults.color = '#555770';
 Chart.defaults.borderColor = 'rgba(0,0,0,0.06)';
 Chart.defaults.font.family = 'Inter';
@@ -214,6 +226,14 @@ function renderCostCharts() {
   const top = Object.entries(byVeh).sort((a, b2) => b2[1] - a[1]).slice(0, 10);
   const tEl = document.getElementById('chartCostTopVeh');
   if (tEl) new Chart(tEl, { type: 'bar', data: { labels: top.map(t => t[0]), datasets: [{ label: 'Chi phí BTBD', data: top.map(t => t[1]), backgroundColor: '#f59e0b', borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } } });
+
+  // Chi phí BTBD theo tháng (dựa trên 'Ngày vào xưởng') - so sánh kỳ
+  destroyChartIfExists('chartCostMonthly');
+  const byMonth = {};
+  b.forEach(x => { const mk = monthKeyFromDate(x.inDate); if (!mk) return; byMonth[mk] = (byMonth[mk] || 0) + parseCost(x.cost); });
+  const months = Object.keys(byMonth).sort().slice(-18);
+  const mEl = document.getElementById('chartCostMonthly');
+  if (mEl) new Chart(mEl, { type: 'bar', data: { labels: months, datasets: [{ label: 'Chi phí BTBD theo tháng (đ)', data: months.map(m => byMonth[m]), backgroundColor: '#8b5cf6', borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } } });
 }
 
 // ==================== PAGE: XU HƯỚNG (lịch sử chỉ số theo ngày) ====================
@@ -940,7 +960,7 @@ function destroyAllCharts() {
     'chartDashReinf', 'chartDashSupplier', 'chartEfficiency', 'chartOpStatus',
     'chartPositions', 'chartDriverStatus', 'chartOntimeTrend', 'chartOntimeGroup',
     'chartBTBDContent', 'chartBTBDTop',
-    'chartCostStructure', 'chartCostTopVeh', 'chartTrendKPI', 'chartTrendCost'
+    'chartCostStructure', 'chartCostTopVeh', 'chartCostMonthly', 'chartTrendKPI', 'chartTrendCost'
   ];
   chartIds.forEach(destroyChartIfExists);
 }
