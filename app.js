@@ -93,7 +93,8 @@ function renderDashboard() {
   const workingDrivers = d.filter(x => x.status === 'Đang làm việc').length;
   const uniqueRoutes = new Set(r.map(x => x.routeName)).size;
   const pendingFines = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
-  const avgEff = e.length ? (e.reduce((s,x) => s + x.efficiency, 0) / e.length).toFixed(1) : 0;
+  const opVehiclesDash = e.filter(x => x.opStatus === 'Đang vận hành');
+  const avgEff = opVehiclesDash.length ? (opVehiclesDash.reduce((s,x) => s + x.efficiency, 0) / opVehiclesDash.length).toFixed(1) : 0;
   const reinfOK = rf.filter(x => x.status === 'Có xe').length;
   const totalFineCost = f.reduce((s,x) => s + (parseCost(x.cost)), 0);
 
@@ -361,7 +362,9 @@ function renderEfficiency() {
   const opStats = {};
   e.forEach(x => { if(x.opStatus) opStats[x.opStatus]=(opStats[x.opStatus]||0)+1; });
   const operating = opStats['Đang vận hành']||0;
-  const avgEff = e.length ? (e.reduce((s,x)=>s+x.efficiency,0)/e.length).toFixed(1) : 0;
+  // Hiệu suất TB: chỉ tính xe đang vận hành (cột P); các trạng thái khác vẫn hiển thị ở bảng chi tiết
+  const opVehicles = e.filter(x => x.opStatus === 'Đang vận hành');
+  const avgEff = opVehicles.length ? (opVehicles.reduce((s,x)=>s+x.efficiency,0)/opVehicles.length).toFixed(1) : 0;
 
   document.getElementById('efficiencyKPIs').innerHTML = makeKPI([
     {l:'Tổng xe', v:e.length, c:'blue', i:'🚛'},
@@ -1016,7 +1019,9 @@ function processAndApplyWorkbook(workbook) {
     const effVal = cellRaw(row, eMap, ['Hiệu suất sử dụng xe', 'Hiệu suất']);
     let numEff = 0;
     if (typeof effVal === 'number') {
-      numEff = Math.round(effVal * 100 * 10) / 10;
+      // <=1: giá trị dạng phân số (0.28) -> nhân 100; >1: đã là % sẵn (28.01) -> giữ nguyên
+      numEff = effVal <= 1 ? effVal * 100 : effVal;
+      numEff = Math.round(numEff * 10) / 10;
     } else if (typeof effVal === 'string') {
       let clean = effVal.replace('%', '').trim().replace(',', '.');
       numEff = parseFloat(clean);
