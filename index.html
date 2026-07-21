@@ -203,7 +203,13 @@
         </div>
         <div class="chart-grid">
           <div class="chart-card" style="grid-column:1/-1">
-            <div class="chart-title"><span class="dot" style="background:var(--purple)"></span> Chi phí BTBD theo tháng (so sánh kỳ)</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <div class="chart-title" style="margin:0"><span class="dot" style="background:var(--purple)"></span> Chi phí vận hành theo kỳ (BTBD + Phạt)</div>
+              <div style="display:flex;gap:6px">
+                <button class="cost-period-btn" data-period="month" onclick="setCostPeriod('month')" style="padding:6px 12px;font-size:12px;font-weight:700;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;background:var(--accent);color:#fff">Theo tháng</button>
+                <button class="cost-period-btn" data-period="quarter" onclick="setCostPeriod('quarter')" style="padding:6px 12px;font-size:12px;font-weight:400;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;background:var(--bg-card);color:var(--text-secondary)">Theo quý</button>
+              </div>
+            </div>
             <canvas id="chartCostMonthly"></canvas>
           </div>
         </div>

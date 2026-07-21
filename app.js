@@ -227,13 +227,48 @@ function renderCostCharts() {
   const tEl = document.getElementById('chartCostTopVeh');
   if (tEl) new Chart(tEl, { type: 'bar', data: { labels: top.map(t => t[0]), datasets: [{ label: 'Chi phí BTBD', data: top.map(t => t[1]), backgroundColor: '#f59e0b', borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } } });
 
-  // Chi phí BTBD theo tháng (dựa trên 'Ngày vào xưởng') - so sánh kỳ
+  renderCostPeriodChart();
+}
+
+// Chi phí vận hành theo kỳ (Tháng/Quý): cột chồng BTBD + Phạt nguội
+function periodKey(v, period) {
+  const mk = monthKeyFromDate(v);
+  if (!mk) return null;
+  if (period === 'quarter') { const parts = mk.split('-'); return parts[0] + '-Q' + Math.ceil(parseInt(parts[1], 10) / 3); }
+  return mk;
+}
+function renderCostPeriodChart() {
   destroyChartIfExists('chartCostMonthly');
-  const byMonth = {};
-  b.forEach(x => { const mk = monthKeyFromDate(x.inDate); if (!mk) return; byMonth[mk] = (byMonth[mk] || 0) + parseCost(x.cost); });
-  const months = Object.keys(byMonth).sort().slice(-18);
-  const mEl = document.getElementById('chartCostMonthly');
-  if (mEl) new Chart(mEl, { type: 'bar', data: { labels: months, datasets: [{ label: 'Chi phí BTBD theo tháng (đ)', data: months.map(m => byMonth[m]), backgroundColor: '#8b5cf6', borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } } });
+  const period = window._costPeriod || 'month';
+  const b = DATA.btbd || [], f = DATA.fines || [];
+  const btbdBy = {}, fineBy = {};
+  b.forEach(x => { const k = periodKey(x.inDate, period); if (!k) return; btbdBy[k] = (btbdBy[k] || 0) + parseCost(x.cost); });
+  f.forEach(x => { const k = periodKey(x.violationTime || x.reportDate, period); if (!k) return; fineBy[k] = (fineBy[k] || 0) + parseCost(x.cost); });
+  const allKeys = Array.from(new Set(Object.keys(btbdBy).concat(Object.keys(fineBy)))).sort();
+  const keys = allKeys.slice(period === 'quarter' ? -12 : -18);
+  const el = document.getElementById('chartCostMonthly');
+  if (!el) return;
+  new Chart(el, {
+    type: 'bar',
+    data: {
+      labels: keys,
+      datasets: [
+        { label: 'Chi phí BTBD', data: keys.map(k => btbdBy[k] || 0), backgroundColor: '#8b5cf6', borderWidth: 0, stack: 'cost' },
+        { label: 'Phạt nguội', data: keys.map(k => fineBy[k] || 0), backgroundColor: '#ef4444', borderWidth: 0, stack: 'cost' },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtM(v) } } } }
+  });
+}
+function setCostPeriod(p) {
+  window._costPeriod = p;
+  document.querySelectorAll('.cost-period-btn').forEach(btn => {
+    const on = btn.getAttribute('data-period') === p;
+    btn.style.fontWeight = on ? '700' : '400';
+    btn.style.color = on ? '#fff' : 'var(--text-secondary)';
+    btn.style.background = on ? 'var(--accent)' : 'var(--bg-card)';
+  });
+  renderCostPeriodChart();
 }
 
 // ==================== PAGE: XU HƯỚNG (lịch sử chỉ số theo ngày) ====================
