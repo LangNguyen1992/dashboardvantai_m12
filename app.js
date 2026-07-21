@@ -944,15 +944,16 @@ function processAndApplyWorkbook(workbook) {
     const rname = row[0];
     if (!rname) continue;
     routes.push({
-      routeName: ser(rname),
-      tonnage: ser(row[1]),
-      warehouse: ser(row[2]),
-      type: ser(row[3]),
-      arrival: ser(row[4]),
-      departure: ser(row[5]),
-      note: ser(row[6]),
-      km: ser(row[7]),
-      supplier: ser(row[8]),
+      routeName: ser(rname),        // Tên tuyến (cột A)
+      tonnage: ser(row[1]),         // Tải trọng (cột B)
+      id: ser(row[2]),              // ID (cột C) - cột mới thêm
+      warehouse: ser(row[3]),       // Tên kho (cột D)
+      type: ser(row[4]),            // Loại hình (cột E) - Phân loại/Giao/Lấy
+      arrival: ser(row[5]),         // Tới điểm (cột F)
+      departure: ser(row[6]),       // Rời điểm (cột G)
+      note: ser(row[7]),            // Loại tuyến (cột H) - hiển thị tại cột Ghi chú
+      km: null,                     // Sheet không còn cột Km
+      supplier: null,               // Sheet không còn cột NCC
     });
   }
 
