@@ -780,6 +780,25 @@ function serPhone(val) {
   return s;
 }
 
+// ===== Tra cột theo TÊN TIÊU ĐỀ (miễn nhiễm khi Sheet chèn/đổi thứ tự cột) =====
+function normHdr(v){ return String(v == null ? '' : v).normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' '); }
+function buildColMap(rows){
+  const header = (rows && rows[0]) ? rows[0] : [];
+  const map = {};
+  for (let i = 0; i < header.length; i++){
+    const k = normHdr(header[i]);
+    if (k !== '' && !(k in map)) map[k] = i; // trùng tên -> giữ cột xuất hiện đầu tiên
+  }
+  return map;
+}
+function colIdx(cmap, names){
+  const arr = Array.isArray(names) ? names : [names];
+  for (const n of arr){ const k = normHdr(n); if (k in cmap) return cmap[k]; }
+  return -1;
+}
+function cellRaw(row, cmap, names){ const i = colIdx(cmap, names); return i >= 0 ? row[i] : null; }
+function cellS(row, cmap, names){ const i = colIdx(cmap, names); return i >= 0 ? ser(row[i]) : null; }
+
 function loadCachedFullData() {
   try {
     const cached = localStorage.getItem('cached_full_data');
@@ -903,94 +922,98 @@ function changeSheetLink() {
 function processAndApplyWorkbook(workbook) {
   // 1. VEHICLES (Thông tin xe)
   const vSheet = workbook.Sheets['Thông tin xe'];
-  const vRows = XLSX.utils.sheet_to_json(vSheet, {header: 1, raw: true});
+  const vRows = XLSX.utils.sheet_to_json(vSheet, {header: 1, raw: true, defval: null});
+  const vMap = buildColMap(vRows);
   const vehicles = [];
   for (let i = 1; i < vRows.length; i++) {
     const row = vRows[i] || [];
-    const plate = row[1];
+    const plate = cellS(row, vMap, 'Biển số');
     if (!plate) continue;
     vehicles.push({
-      stt: ser(row[0]),
-      plate: ser(plate),
-      tonnage: ser(row[2]),
-      model: ser(row[3]),
-      region: ser(row[5]),
-      department: ser(row[6]),
-      boxVolume: ser(row[7]),
-      yearReceived: ser(row[9]),
-      yearsUsed: ser(row[11]),
-      condition: ser(row[12]),
-      status: ser(row[13]),
-      insuranceExpiry: ser(row[14]),
-      inspectionCode: ser(row[15]),
-      inspectionExpiry: ser(row[16]),
-      liabilityExpiry: ser(row[17]),
-      roadFeeExpiry: ser(row[18]),
-      badgeExpiry: ser(row[19]),
-      regCertExpiry: ser(row[20]),
-      totalKm: ser(row[23]),
-      warning: ser(row[25]),
-      note: ser(row[26]),
-      fleet: ser(row[27]),
+      stt: cellS(row, vMap, 'STT'),
+      plate: plate,
+      tonnage: cellS(row, vMap, 'Tải trọng'),
+      model: cellS(row, vMap, 'Model'),
+      region: cellS(row, vMap, 'Khu vực'),
+      department: cellS(row, vMap, ['Bộ phận quản lý', 'Bộ phận']),
+      boxVolume: cellS(row, vMap, 'Thể tích thùng'),
+      yearReceived: cellS(row, vMap, 'Năm nhận xe'),
+      yearsUsed: cellS(row, vMap, 'Số năm đã dùng'),
+      condition: cellS(row, vMap, 'Tình trạng xe'),
+      status: cellS(row, vMap, 'Tình trạng'),
+      insuranceExpiry: cellS(row, vMap, 'Hạn BH vật chất'),
+      inspectionCode: cellS(row, vMap, 'Mã đăng kiểm'),
+      inspectionExpiry: cellS(row, vMap, 'Hạn đăng kiểm'),
+      liabilityExpiry: cellS(row, vMap, 'Hạn bảo hiểm dân sự'),
+      roadFeeExpiry: cellS(row, vMap, 'Hạn phí đường bộ'),
+      badgeExpiry: cellS(row, vMap, 'Hạn phù hiệu'),
+      regCertExpiry: cellS(row, vMap, 'Hạn giấy đăng ký'),
+      totalKm: cellS(row, vMap, ['Tổng KM đã chạy', 'Tổng KM']),
+      warning: cellS(row, vMap, 'Cảnh báo'),
+      note: cellS(row, vMap, 'Ghi chú'),
+      fleet: cellS(row, vMap, 'Đội xe'),
     });
   }
 
   // 2. ROUTES (Lịch tải)
   const rSheet = workbook.Sheets['Lịch tải'];
-  const rRows = XLSX.utils.sheet_to_json(rSheet, {header: 1, raw: true});
+  const rRows = XLSX.utils.sheet_to_json(rSheet, {header: 1, raw: true, defval: null});
+  const rMap = buildColMap(rRows);
   const routes = [];
   for (let i = 1; i < rRows.length; i++) {
     const row = rRows[i] || [];
-    const rname = row[0];
+    const rname = cellS(row, rMap, 'Tên tuyến');
     if (!rname) continue;
     routes.push({
-      routeName: ser(rname),        // Tên tuyến (cột A)
-      tonnage: ser(row[1]),         // Tải trọng (cột B)
-      id: ser(row[2]),              // ID (cột C) - cột mới thêm
-      warehouse: ser(row[3]),       // Tên kho (cột D)
-      type: ser(row[4]),            // Loại hình (cột E) - Phân loại/Giao/Lấy
-      arrival: ser(row[5]),         // Tới điểm (cột F)
-      departure: ser(row[6]),       // Rời điểm (cột G)
-      note: ser(row[7]),            // Loại tuyến (cột H) - hiển thị tại cột Ghi chú
-      km: null,                     // Sheet không còn cột Km
-      supplier: null,               // Sheet không còn cột NCC
+      routeName: rname,
+      tonnage: cellS(row, rMap, 'Tải trọng'),
+      id: cellS(row, rMap, 'ID'),
+      warehouse: cellS(row, rMap, ['Tên kho', 'Tên kho/BC', 'Kho/BC']),
+      type: cellS(row, rMap, 'Loại hình'),                 // Phân loại/Giao/Lấy
+      arrival: cellS(row, rMap, 'Tới điểm'),
+      departure: cellS(row, rMap, 'Rời điểm'),
+      note: cellS(row, rMap, ['Loại tuyến', 'Ghi chú']),   // hiển thị tại cột Ghi chú
+      km: cellS(row, rMap, 'Km'),                          // tự có nếu Sheet thêm lại
+      supplier: cellS(row, rMap, ['NCC', 'Tên NCC']),      // tự có nếu Sheet thêm lại
     });
   }
 
   // 3. FINES (Phạt nguội)
   const fSheet = workbook.Sheets['Phạt nguội'];
-  const fRows = XLSX.utils.sheet_to_json(fSheet, {header: 1, raw: true});
+  const fRows = XLSX.utils.sheet_to_json(fSheet, {header: 1, raw: true, defval: null});
+  const fMap = buildColMap(fRows);
   const fines = [];
   for (let i = 1; i < fRows.length; i++) {
     const row = fRows[i] || [];
-    const plate = row[4]; // col E is BKS
+    const plate = cellS(row, fMap, 'BKS');
     if (!plate) continue;
-      fines.push({
-      reportDate: ser(row[0]),
-      plate: ser(plate),
-      depot: ser(row[5]),
-      violationTime: ser(row[7]),
-      location: ser(row[9]),
-      violation: ser(row[10]),
-      cost: ser(row[11]),
-      sup: ser(row[13]),
-      driverId: ser(row[14]),
-      driverName: ser(row[15]),
-      driverStatus: ser(row[16]),
-      expectedDate: ser(row[17]),
-      progress: ser(row[19]),    
-  });
+    fines.push({
+      reportDate: cellS(row, fMap, 'Ngày SUP cập nhật vi phạm'),
+      plate: plate,
+      depot: cellS(row, fMap, 'Kho Quản Lý'),
+      violationTime: cellS(row, fMap, ['violation_time', 'Thời gian vi phạm']),
+      location: cellS(row, fMap, 'Nơi vi phạm'),
+      violation: cellS(row, fMap, 'Lỗi vi phạm'),
+      cost: cellS(row, fMap, 'Chi phí dự kiến'),
+      sup: cellS(row, fMap, 'SUP phụ trách'),
+      driverId: cellS(row, fMap, 'MSNV'),
+      driverName: cellS(row, fMap, 'Tài Xế'),
+      driverStatus: cellS(row, fMap, 'Tình Trạng'),
+      expectedDate: cellS(row, fMap, ['Ngày dự kiến xử lý xong (15 ngày)', 'Ngày dự kiến xử lý xong']),
+      progress: cellS(row, fMap, 'Tiến Độ'),
+    });
   }
 
   // 4. EFFICIENCY (Hiệu suất sử dụng xe)
   const eSheet = workbook.Sheets['Hiệu suất sử dụng xe'];
-  const eRows = XLSX.utils.sheet_to_json(eSheet, {header: 1, raw: true});
+  const eRows = XLSX.utils.sheet_to_json(eSheet, {header: 1, raw: true, defval: null});
+  const eMap = buildColMap(eRows);
   const efficiency = [];
   for (let i = 1; i < eRows.length; i++) {
     const row = eRows[i] || [];
-    const plate = row[1];
+    const plate = cellS(row, eMap, 'Biển số');
     if (!plate) continue;
-    const effVal = row[15]; // index 15 is col 16 (Hiệu suất sử dụng xe)
+    const effVal = cellRaw(row, eMap, ['Hiệu suất sử dụng xe', 'Hiệu suất']);
     let numEff = 0;
     if (typeof effVal === 'number') {
       numEff = Math.round(effVal * 100 * 10) / 10;
@@ -1004,74 +1027,76 @@ function processAndApplyWorkbook(workbook) {
       numEff = Math.round(numEff * 10) / 10;
     }
     efficiency.push({
-      stt: ser(row[0]),
-      plate: ser(plate),
-      tonnage: ser(row[2]),
-      model: ser(row[3]),
-      region: ser(row[5]),
-      department: ser(row[6]),
-      yearsUsed: ser(row[11]),
-      condition: ser(row[12]),
-      status: ser(row[13]),
-      vehicleType: ser(row[14]),
+      stt: cellS(row, eMap, 'STT'),
+      plate: plate,
+      tonnage: cellS(row, eMap, 'Tải trọng'),
+      model: cellS(row, eMap, 'Model'),
+      region: cellS(row, eMap, 'Khu vực'),
+      department: cellS(row, eMap, ['Bộ phận quản lý', 'Bộ phận']),
+      yearsUsed: cellS(row, eMap, 'Số năm đã dùng'),
+      condition: cellS(row, eMap, 'Tình trạng xe'),
+      status: cellS(row, eMap, 'Tình trạng'),
+      vehicleType: cellS(row, eMap, 'Loại xe'),
       efficiency: numEff,
-      opStatus: ser(row[16]),
+      opStatus: cellS(row, eMap, 'Tình trạng vận hành'),
     });
   }
 
   // 5. DRIVERS (Nhân sự)
   const dSheet = workbook.Sheets['Nhân sự'] || workbook.Sheets['Tài xế'];
-  const dRows = XLSX.utils.sheet_to_json(dSheet, {header: 1, raw: true});
+  const dRows = XLSX.utils.sheet_to_json(dSheet, {header: 1, raw: true, defval: null});
+  const dMap = buildColMap(dRows);
   const drivers = [];
   for (let i = 1; i < dRows.length; i++) {
     const row = dRows[i] || [];
-    const name = row[2]; // col 3
+    const name = cellS(row, dMap, ['Thông tin nhân viên', 'Họ tên', 'Tên nhân viên']);
     if (!name) continue;
     drivers.push({
-      stt: ser(row[0]),
-      employeeId: ser(row[1]),
-      name: ser(name),
-      phone: serPhone(row[3]),      // SĐT (cột D) - khôi phục số 0 đầu
-      position: ser(row[13]),       // Vị trí (cột N)
-      unit: ser(row[14]),           // Đơn vị (cột O)
-      supervisor: ser(row[15]),     // Quản lý trực tiếp (cột P)
-      shift: ser(row[16]),          // Ca làm (cột Q)
-      route: ser(row[17]),          // Tuyến chạy (cột R)
-      startDate: ser(row[18]),      // Ngày vào làm (cột S)
-      endDate: ser(row[19]),        // Ngày nghỉ việc (cột T)
-      status: ser(row[20]),         // Tình trạng (cột U)
-      seniority: ser(row[21]),      // Thâm niên (cột V)
-      seniorityDetail: ser(row[22]),// Thâm niên 1 (cột W)
+      stt: cellS(row, dMap, 'STT'),
+      employeeId: cellS(row, dMap, ['MSSV', 'MSNV']),
+      name: name,
+      phone: serPhone(cellRaw(row, dMap, ['Số điện thoại', 'SĐT'])),
+      position: cellS(row, dMap, ['Vị trí', 'Chức danh']),
+      unit: cellS(row, dMap, 'Đơn vị'),
+      supervisor: cellS(row, dMap, ['Quản lý trực tiếp', 'Quản lý']),
+      shift: cellS(row, dMap, 'Ca làm'),
+      route: cellS(row, dMap, ['Tuyến chạy', 'Tuyến']),
+      startDate: cellS(row, dMap, 'Ngày vào làm'),
+      endDate: cellS(row, dMap, 'Ngày nghỉ việc'),
+      status: cellS(row, dMap, 'Tình trạng'),
+      seniority: cellS(row, dMap, 'Thâm niên'),
+      seniorityDetail: cellS(row, dMap, ['Thâm niên 1', 'Thâm niên chi tiết']),
     });
   }
 
   // 6. REINFORCEMENT (Tải tăng cường Lấy)
   const rfSheet = workbook.Sheets['Tải tăng cường Lấy'];
-  const rfRows = XLSX.utils.sheet_to_json(rfSheet, {header: 1, raw: true});
+  const rfRows = XLSX.utils.sheet_to_json(rfSheet, {header: 1, raw: true, defval: null});
+  const rfMap = buildColMap(rfRows);
   const reinforcement = [];
   for (let i = 1; i < rfRows.length; i++) {
     const row = rfRows[i] || [];
-    const tid = row[0];
+    const tid = cellS(row, rfMap, ['Ticket_id', 'Ticket id', 'Ticket']);
     if (!tid) continue;
     reinforcement.push({
-      ticketId: ser(tid),
-      region: ser(row[1]),
-      warehouse: ser(row[2]),
-      route: ser(row[4]),
-      employeeId: ser(row[5]),
-      phone: ser(row[7]),
-      packages: ser(row[8]),
-      volumeNeeded: ser(row[9]),
-      requestDate: ser(row[10]),
-      note: ser(row[11]),
-      status: ser(row[12]),
-      date: ser(row[13]),
-      arrivalTime: ser(row[14]),
-      tripCode: ser(row[15]),
-      supplier: ser(row[16]),
-      plate: ser(row[17]),
-      tonnage: ser(row[18]),
-      driverInfo: ser(row[19]),
+      ticketId: tid,
+      region: cellS(row, rfMap, 'Vùng'),
+      warehouse: cellS(row, rfMap, ['warehouse', 'Bưu cục', 'Kho']),
+      route: cellS(row, rfMap, 'Lộ trình'),
+      employeeId: cellS(row, rfMap, 'MSNV'),
+      phone: cellS(row, rfMap, ['Số điện thoại', 'SĐT']),
+      packages: cellS(row, rfMap, 'Số lượng kiện'),
+      volumeNeeded: cellS(row, rfMap, 'Thể tích cần'),
+      requestDate: cellS(row, rfMap, 'Ngày mong muốn'),
+      note: cellS(row, rfMap, 'Ghi chú'),
+      status: cellS(row, rfMap, 'Trạng thái'),
+      date: cellS(row, rfMap, 'Ngày'),
+      arrivalTime: cellS(row, rfMap, 'Giờ tới'),
+      tripCode: cellS(row, rfMap, 'Mã chuyến đi'),
+      supplier: cellS(row, rfMap, ['Tên NCC', 'NCC']),
+      plate: cellS(row, rfMap, 'BKS'),
+      tonnage: cellS(row, rfMap, 'Tải trọng'),
+      driverInfo: cellS(row, rfMap, ['Thông tin tx', 'Thông tin TX']),
     });
   }
 
@@ -1114,25 +1139,26 @@ function processAndApplyWorkbook(workbook) {
   const bSheet = workbook.Sheets['BTBD'];
   if (bSheet) {
     const bRows = XLSX.utils.sheet_to_json(bSheet, { header: 1, raw: true, defval: null });
+    const bMap = buildColMap(bRows);
     for (let i = 1; i < bRows.length; i++) {
       const row = bRows[i] || [];
-      const plate = row[0];
+      const plate = cellS(row, bMap, 'BKS');
       if (!plate) continue;
       btbd.push({
-        plate: ser(plate),
-        vehicleInfo: ser(row[1]),
-        yearUse: ser(row[2]),
-        odo: ser(row[3]),
-        kmNextBD: ser(row[4]),
-        inDate: ser(row[5]),
-        content: ser(row[6]),
-        category: ser(row[7]),
-        detail: ser(row[8]),
-        garage: ser(row[9]),
-        expectedDate: ser(row[10]),
-        outDate: ser(row[11]),
-        totalHours: ser(row[12]),
-        note: ser(row[13]),
+        plate: plate,
+        vehicleInfo: cellS(row, bMap, ['Tải trọng/Hãng', 'Tải trọng']),
+        yearUse: cellS(row, bMap, 'Năm sử dụng'),
+        odo: cellS(row, bMap, 'ODO'),
+        kmNextBD: cellS(row, bMap, ['KM định mức BD kì tới', 'KM định mức BD kỳ tới']),
+        inDate: cellS(row, bMap, 'Ngày vào xưởng'),
+        content: cellS(row, bMap, 'Nội dung'),
+        category: cellS(row, bMap, ['Hạng mục BTBD', 'Hạng mục']),
+        detail: cellS(row, bMap, ['Chi tiết Bảo dưỡng, Sửa chữa', 'Chi tiết']),
+        garage: cellS(row, bMap, 'Gara'),
+        expectedDate: cellS(row, bMap, ['Ngày dự kiến xong', 'Ngày dự kiến']),
+        outDate: cellS(row, bMap, 'Ngày ra xưởng'),
+        totalHours: cellS(row, bMap, 'Tổng giờ'),
+        note: cellS(row, bMap, 'Ghi chú'),
       });
     }
   }
