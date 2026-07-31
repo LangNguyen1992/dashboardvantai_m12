@@ -535,7 +535,7 @@ tbody tr:last-child td { border-bottom:none; }
 .sidebar{
   background:linear-gradient(180deg,var(--ghn-black) 0%,var(--ghn-black-2) 100%) !important;
   border-right:1px solid rgba(23,163,152,.25) !important;
-  position:relative; overflow:hidden;
+  position:fixed !important; overflow:hidden;
 }
 /* Hoa văn chevron mờ trên sidebar */
 .sidebar::before{
