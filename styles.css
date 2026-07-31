@@ -591,3 +591,8 @@ tbody tr:last-child td { border-bottom:none; }
 
 /* Logo emblem lớn hơn chút trên sidebar tối */
 .sidebar-logo .logo-icon{ height:30px !important; border-radius:8px; }
+
+/* Thanh cảnh báo & ghi chú: đọc rõ trên nền đen */
+.quick-alerts{ background:rgba(220,38,38,.14) !important; border-color:rgba(220,38,38,.40) !important; }
+.quick-alerts .alert-msg{ color:#ffdad5 !important; }
+tbody tr:hover{ background:rgba(23,163,152,.08) !important; }
