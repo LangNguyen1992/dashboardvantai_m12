@@ -1,16 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Pure White Theme */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fc;
-  --bg-card: #ffffff;
-  --bg-glass: #f4f5f8;
-  --border: #e2e5ed;
-  --border-color: #e2e5ed;
-  --text-primary: #1a1a2e;
-  --text-secondary: #4a4d60;
-  --text-muted: #8e92a4;
+  /* Dark Theme (nền đen brand GHN) */
+  --bg-primary: #0e1513;
+  --bg-secondary: #14201d;
+  --bg-card: #15211e;
+  --bg-glass: #1a2723;
+  --border: rgba(255,255,255,0.10);
+  --border-color: rgba(255,255,255,0.10);
+  --text-primary: #eef4f2;
+  --text-secondary: #b6c2bf;
+  --text-muted: #7f8d89;
 
   /* GHN Teal palette (bộ nhận diện mới) */
   --accent: #17a398;
@@ -562,27 +562,32 @@ tbody tr:last-child td { border-bottom:none; }
 .sidebar-footer .user-name{ color:#fff !important; }
 .sidebar-footer .user-role{ color:var(--ghn-teal-light) !important; }
 
-/* Nền trang: hoa văn chevron rất mờ + tagline thương hiệu */
-.main-content{ position:relative; }
-.main-content::before{
-  content:""; position:fixed; top:var(--header-h); left:var(--sidebar-w); right:0; bottom:0;
-  pointer-events:none; z-index:0; opacity:.035;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><g fill='none' stroke='%230f1517' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'><path d='M30 40 L70 80 L30 120'/><path d='M80 40 L120 80 L80 120'/></g></svg>");
-  background-size:180px 180px;
-}
-.page-content{ position:relative; z-index:1; }
-/* Watermark tagline góc dưới phải vùng nội dung */
-.main-content::after{
-  content:"YOUR LOADS. OUR ROADS."; position:fixed; right:26px; bottom:14px;
-  font-size:12px; font-weight:800; letter-spacing:2px; color:var(--ghn-teal);
-  opacity:.20; pointer-events:none; z-index:0;
+/* Vùng nội dung: nền đen + hoa văn chevron RẤT nhẹ, bám theo trang (không phủ cố định) */
+.main-content{
+  background:var(--bg-primary) !important;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'><g fill='none' stroke='%23163029' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'><path d='M18 24 L36 45 L18 66'/><path d='M48 24 L66 45 L48 66'/></g></svg>");
+  background-size:90px 90px;
 }
 
-/* Header: gạch nhấn teal */
-.header{ border-bottom:2px solid var(--ghn-teal) !important; }
+/* Header tối, ghim trên cùng, gạch nhấn teal */
+.header{
+  background:var(--ghn-black) !important;
+  border-bottom:2px solid var(--ghn-teal) !important;
+}
+.header-left h1{ color:#fff !important; }
+.header-time{ background:rgba(255,255,255,.06) !important; color:#cdd6d4 !important; border-color:rgba(255,255,255,.12) !important; }
 
-/* Nút bấm/nhấn theo teal (đồng bộ chung) */
-.sync-btn-primary{ }
+/* Thẻ/nút nền tối cho dễ đọc trên nền đen */
+.header-btn{ background:rgba(255,255,255,.06) !important; color:#cdd6d4 !important; border-color:rgba(255,255,255,.12) !important; }
+#btnChangeSheet{ background:rgba(255,255,255,.06) !important; color:#eef4f2 !important; border-color:rgba(255,255,255,.14) !important; }
+
+/* Tagline thương hiệu: nằm trong luồng, cuối trang, không phủ nội dung */
+.page-content::after{
+  content:"YOUR LOADS. OUR ROADS.";
+  display:block; text-align:right; margin-top:18px; padding-top:10px;
+  border-top:1px solid rgba(23,163,152,.18);
+  font-size:11px; font-weight:800; letter-spacing:2px; color:var(--ghn-teal); opacity:.5;
+}
 
 /* Logo emblem lớn hơn chút trên sidebar tối */
 .sidebar-logo .logo-icon{ height:30px !important; border-radius:8px; }
