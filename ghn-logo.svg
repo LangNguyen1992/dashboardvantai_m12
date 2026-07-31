@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="GHN">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2fd4c4"/>
+      <stop offset="1" stop-color="#0e8a80"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="46" height="46" rx="11" fill="#0f1517"/>
+  <rect x="1" y="1" width="46" height="46" rx="11" fill="none" stroke="url(#g)" stroke-width="2"/>
+  <!-- chevron kép hướng phải (motif thương hiệu) -->
+  <g fill="none" stroke="url(#g)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 15 L21 24 L12 33"/>
+    <path d="M24 15 L33 24 L24 33"/>
+  </g>
+</svg>

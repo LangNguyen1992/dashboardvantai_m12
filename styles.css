@@ -12,13 +12,19 @@
   --text-secondary: #4a4d60;
   --text-muted: #8e92a4;
 
-  /* GHN Orange palette */
-  --accent: #ee4d2d;
-  --accent-hover: #d63a1e;
-  --accent-light: rgba(238,77,45,0.08);
-  --accent-glow: rgba(238,77,45,0.2);
-  --ghn-orange: #f26522;
-  --ghn-orange-dark: #d45a1e;
+  /* GHN Teal palette (bộ nhận diện mới) */
+  --accent: #17a398;
+  --accent-hover: #0e8a80;
+  --accent-light: rgba(23,163,152,0.08);
+  --accent-glow: rgba(23,163,152,0.22);
+  --ghn-teal: #17a398;
+  --ghn-teal-light: #2fd4c4;
+  --ghn-teal-dark: #0e8a80;
+  --ghn-black: #0f1517;
+  --ghn-black-2: #12211f;
+  /* Giữ tương thích biến cũ */
+  --ghn-orange: #17a398;
+  --ghn-orange-dark: #0e8a80;
 
   --success: #16a34a;
   --warning: #d97706;
@@ -519,3 +525,64 @@ tbody tr:last-child td { border-bottom:none; }
   background: rgba(220,38,38,0.1) !important;
   border-color: rgba(220,38,38,0.2) !important;
 }
+
+/* ============================================================
+   ĐỒNG BỘ NHẬN DIỆN GHN MỚI (teal + đen + chevron)
+   Khối bổ sung — đặt cuối file để override an toàn.
+   ============================================================ */
+
+/* Sidebar tông brand đen-teal */
+.sidebar{
+  background:linear-gradient(180deg,var(--ghn-black) 0%,var(--ghn-black-2) 100%) !important;
+  border-right:1px solid rgba(23,163,152,.25) !important;
+  position:relative; overflow:hidden;
+}
+/* Hoa văn chevron mờ trên sidebar */
+.sidebar::before{
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.10;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><path d='M8 6 L22 20 L8 34' fill='none' stroke='%2317a398' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/><path d='M30 6 L44 20 L30 34' fill='none' stroke='%2317a398' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-size:60px 60px;
+}
+.sidebar-logo{ border-bottom:1px solid rgba(255,255,255,.10) !important; position:relative; z-index:1; }
+.sidebar-logo .logo-text h2{ color:#fff !important; }
+.sidebar-logo .logo-text span{ color:var(--ghn-teal-light) !important; letter-spacing:.5px; }
+.sidebar-nav{ position:relative; z-index:1; }
+.nav-section-title{ color:rgba(255,255,255,.45) !important; }
+.nav-item{ color:#cdd6d4 !important; }
+.nav-item:hover{ background:rgba(255,255,255,.06) !important; color:#fff !important; }
+.nav-item.active{
+  background:rgba(23,163,152,.18) !important;
+  color:var(--ghn-teal-light) !important;
+  border:1px solid rgba(23,163,152,.45) !important;
+}
+.sidebar-footer{ border-top:1px solid rgba(255,255,255,.10) !important; position:relative; z-index:1; }
+.sidebar-footer .avatar{
+  background:linear-gradient(135deg,var(--ghn-teal-light),var(--ghn-teal-dark)) !important;
+}
+.sidebar-footer .user-name{ color:#fff !important; }
+.sidebar-footer .user-role{ color:var(--ghn-teal-light) !important; }
+
+/* Nền trang: hoa văn chevron rất mờ + tagline thương hiệu */
+.main-content{ position:relative; }
+.main-content::before{
+  content:""; position:fixed; top:var(--header-h); left:var(--sidebar-w); right:0; bottom:0;
+  pointer-events:none; z-index:0; opacity:.035;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><g fill='none' stroke='%230f1517' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'><path d='M30 40 L70 80 L30 120'/><path d='M80 40 L120 80 L80 120'/></g></svg>");
+  background-size:180px 180px;
+}
+.page-content{ position:relative; z-index:1; }
+/* Watermark tagline góc dưới phải vùng nội dung */
+.main-content::after{
+  content:"YOUR LOADS. OUR ROADS."; position:fixed; right:26px; bottom:14px;
+  font-size:12px; font-weight:800; letter-spacing:2px; color:var(--ghn-teal);
+  opacity:.20; pointer-events:none; z-index:0;
+}
+
+/* Header: gạch nhấn teal */
+.header{ border-bottom:2px solid var(--ghn-teal) !important; }
+
+/* Nút bấm/nhấn theo teal (đồng bộ chung) */
+.sync-btn-primary{ }
+
+/* Logo emblem lớn hơn chút trên sidebar tối */
+.sidebar-logo .logo-icon{ height:30px !important; border-radius:8px; }
