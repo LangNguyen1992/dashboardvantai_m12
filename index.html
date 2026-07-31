@@ -202,15 +202,24 @@
           </div>
         </div>
         <div class="chart-grid">
-          <div class="chart-card" style="grid-column:1/-1">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-              <div class="chart-title" style="margin:0"><span class="dot" style="background:var(--purple)"></span> Chi phí vận hành theo kỳ (BTBD + Phạt)</div>
+          <div class="chart-card" style="grid-column:1/-1;padding-bottom:4px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div class="chart-title" style="margin:0"><span class="dot" style="background:var(--purple)"></span> Chi phí theo kỳ — tách riêng BTBD và Phạt nguội</div>
               <div style="display:flex;gap:6px">
                 <button class="cost-period-btn" data-period="month" onclick="setCostPeriod('month')" style="padding:6px 12px;font-size:12px;font-weight:700;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;background:var(--accent);color:#fff">Theo tháng</button>
                 <button class="cost-period-btn" data-period="quarter" onclick="setCostPeriod('quarter')" style="padding:6px 12px;font-size:12px;font-weight:400;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;background:var(--bg-card);color:var(--text-secondary)">Theo quý</button>
               </div>
             </div>
-            <canvas id="chartCostMonthly"></canvas>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--purple)"></span> 🔧 Chi phí BTBD theo kỳ</div>
+            <canvas id="chartCostBTBDPeriod"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--danger)"></span> 🚨 Chi phí Phạt nguội theo kỳ (Đã đóng / Chưa đóng)</div>
+            <canvas id="chartCostFinesPeriod"></canvas>
           </div>
         </div>
         <div class="table-card">
@@ -362,6 +371,34 @@
       <!-- ============ PAGE 3: PHẠT NGUỘI ============ -->
       <div class="page" id="page-fines">
         <div class="kpi-grid" id="finesKPIs"></div>
+
+        <!-- TỔNG HỢP PHẠT NGUỘI THEO XE -->
+        <div class="table-card">
+          <div class="table-header">
+            <h3>🚛 Tổng hợp phạt nguội theo xe</h3>
+          </div>
+          <div style="overflow-x:auto;max-height:380px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Biển số</th>
+                  <th>Số vụ</th>
+                  <th>Tổng chi phí</th>
+                  <th>Đã đóng (vụ)</th>
+                  <th>Chưa đóng (vụ)</th>
+                  <th>Tiền chưa đóng</th>
+                  <th>Tình trạng</th>
+                </tr>
+              </thead>
+              <tbody id="finesByVehicleBody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);padding:8px 4px 0">
+            Đã đóng gồm cả vụ "Tạo eform hoàn ứng" (đã nộp phạt, đang hoàn ứng từ tài xế). Sắp xếp theo tổng chi phí giảm dần.
+          </div>
+        </div>
+
         <div class="table-card">
           <div class="table-header">
             <h3>🚨 Danh sách phạt nguội</h3>

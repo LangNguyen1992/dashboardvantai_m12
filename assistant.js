@@ -316,7 +316,7 @@
     }
     // chưa xử lý
     if (has(q, ['chua xu ly', 'chua hoan', 'dang xu ly', 'cho xu ly', 'ton dong'])) {
-      var pend = f.filter(function (x) { return !/xong|hoan thanh|da dong|closed/.test(noAccent(x.progress)); });
+      var pend = f.filter(function (x) { return !/xong|hoan thanh|da dong|eform|closed/.test(noAccent(x.progress)); });
       var body2 = pend.slice(0, 30).map(function (x) { return [x.plate, x.sup, x.violation, fmtNum(parseMoney(x.cost)), x.progress]; });
       return '<b>Phạt nguội chưa hoàn tất: ' + pend.length + ' vụ</b>' +
         table(['BKS', 'SUP', 'Lỗi', 'Chi phí (đ)', 'Tiến độ'], body2);
@@ -350,7 +350,7 @@
       return kpi('Tổng chi phí phạt nguội', fmtNum(tot) + ' đ', f.length + ' vụ');
     }
     if (has(q, ['chua xu ly', 'chua hoan', 'cho xu ly', 'dang xu ly', 'ton dong'])) {
-      var pend = f.filter(function (x) { return !/xong|hoan thanh|da dong|closed/.test(noAccent(x.progress)); });
+      var pend = f.filter(function (x) { return !/xong|hoan thanh|da dong|eform|closed/.test(noAccent(x.progress)); });
       return kpi('Phạt nguội chưa hoàn tất', pend.length + ' vụ', 'trên tổng ' + f.length);
     }
     return kpi('Tổng số vụ phạt nguội', f.length + ' vụ', 'tổng tiền ' + fmtNum(f.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0)) + ' đ');

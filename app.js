@@ -195,12 +195,15 @@ function renderCost() {
   const totalBTBD = b.reduce((s, x) => s + parseCost(x.cost), 0);
   const totalFine = f.reduce((s, x) => s + parseCost(x.cost), 0);
   const total = totalBTBD + totalFine;
+  let finePaid = 0, fineUnpaid = 0;
+  f.forEach(x => { const c = parseCost(x.cost); if (finePaidClass(x) === 'paid') finePaid += c; else fineUnpaid += c; });
   const kpiEl = document.getElementById('costKPIs');
   if (kpiEl) kpiEl.innerHTML = makeKPI([
-    { l: 'Tổng chi phí BTBD', v: fmt(totalBTBD) + '₫', c: 'orange', i: '🔧' },
-    { l: 'Số lượt vào xưởng', v: b.length, c: 'blue', i: '🏭' },
-    { l: 'Tổng phạt nguội', v: fmt(totalFine) + '₫', c: 'red', i: '🚨' },
-    { l: 'Tổng chi phí (BTBD+Phạt)', v: fmt(total) + '₫', c: 'purple', i: '💰' },
+    { l: 'Chi phí BTBD (' + b.length + ' lượt)', v: fmt(totalBTBD) + '₫', c: 'purple', i: '🔧' },
+    { l: 'BTBD bình quân/lượt', v: b.length ? fmt(totalBTBD / b.length) + '₫' : '—', c: 'blue', i: '🏭' },
+    { l: 'Chi phí Phạt nguội (' + f.length + ' vụ)', v: fmt(totalFine) + '₫', c: 'red', i: '🚨' },
+    { l: 'Phạt đã đóng / chưa đóng', v: fmt(finePaid) + ' / ' + fmt(fineUnpaid) + '₫', c: 'orange', i: '⚖️' },
+    { l: 'Tổng chi phí (BTBD+Phạt)', v: fmt(total) + '₫', c: 'green', i: '💰' },
   ]);
   const byVeh = {};
   b.forEach(x => { const pl = x.plate || 'N/A'; if (!byVeh[pl]) byVeh[pl] = { n: 0, c: 0 }; byVeh[pl].n++; byVeh[pl].c += parseCost(x.cost); });
@@ -239,24 +242,50 @@ function periodKey(v, period) {
 }
 function renderCostPeriodChart() {
   destroyChartIfExists('chartCostMonthly');
+  destroyChartIfExists('chartCostBTBDPeriod');
+  destroyChartIfExists('chartCostFinesPeriod');
   const period = window._costPeriod || 'month';
   const b = DATA.btbd || [], f = DATA.fines || [];
-  const btbdBy = {}, fineBy = {};
+  const btbdBy = {}, fineBy = {}, finePaidBy = {}, fineUnpaidBy = {};
   b.forEach(x => { const k = periodKey(x.inDate, period); if (!k) return; btbdBy[k] = (btbdBy[k] || 0) + parseCost(x.cost); });
-  f.forEach(x => { const k = periodKey(x.violationTime || x.reportDate, period); if (!k) return; fineBy[k] = (fineBy[k] || 0) + parseCost(x.cost); });
+  f.forEach(x => {
+    const k = periodKey(x.violationTime || x.reportDate, period); if (!k) return;
+    const c = parseCost(x.cost);
+    fineBy[k] = (fineBy[k] || 0) + c;
+    if (finePaidClass(x) === 'paid') finePaidBy[k] = (finePaidBy[k] || 0) + c;
+    else fineUnpaidBy[k] = (fineUnpaidBy[k] || 0) + c;
+  });
   const allKeys = Array.from(new Set(Object.keys(btbdBy).concat(Object.keys(fineBy)))).sort();
   const keys = allKeys.slice(period === 'quarter' ? -12 : -18);
-  const el = document.getElementById('chartCostMonthly');
-  if (!el) return;
-  new Chart(el, {
+  const commonOpts = { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { y: { ticks: { callback: v => fmtM(v) } } } };
+
+  // Biểu đồ riêng: chi phí BTBD theo kỳ
+  const elB = document.getElementById('chartCostBTBDPeriod');
+  if (elB) new Chart(elB, {
     type: 'bar',
-    data: {
-      labels: keys,
-      datasets: [
-        { label: 'Chi phí BTBD', data: keys.map(k => btbdBy[k] || 0), backgroundColor: '#8b5cf6', borderWidth: 0, stack: 'cost' },
-        { label: 'Phạt nguội', data: keys.map(k => fineBy[k] || 0), backgroundColor: '#ef4444', borderWidth: 0, stack: 'cost' },
-      ]
-    },
+    data: { labels: keys, datasets: [ { label: 'Chi phí BTBD', data: keys.map(k => btbdBy[k] || 0), backgroundColor: '#8b5cf6', borderWidth: 0 } ] },
+    options: commonOpts
+  });
+
+  // Biểu đồ riêng: chi phí Phạt nguội theo kỳ (tách Đã đóng / Chưa đóng)
+  const elF = document.getElementById('chartCostFinesPeriod');
+  if (elF) new Chart(elF, {
+    type: 'bar',
+    data: { labels: keys, datasets: [
+      { label: 'Đã đóng phạt', data: keys.map(k => finePaidBy[k] || 0), backgroundColor: '#16a34a', borderWidth: 0, stack: 'fine' },
+      { label: 'Chưa đóng', data: keys.map(k => fineUnpaidBy[k] || 0), backgroundColor: '#ef4444', borderWidth: 0, stack: 'fine' },
+    ] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtM(v) } } } }
+  });
+
+  // Giữ tương thích: nếu còn canvas cũ (cache HTML) thì vẫn vẽ dạng chồng
+  const el = document.getElementById('chartCostMonthly');
+  if (el) new Chart(el, {
+    type: 'bar',
+    data: { labels: keys, datasets: [
+      { label: 'Chi phí BTBD', data: keys.map(k => btbdBy[k] || 0), backgroundColor: '#8b5cf6', borderWidth: 0, stack: 'cost' },
+      { label: 'Phạt nguội', data: keys.map(k => fineBy[k] || 0), backgroundColor: '#ef4444', borderWidth: 0, stack: 'cost' },
+    ] },
     options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtM(v) } } } }
   });
 }
@@ -573,29 +602,79 @@ function renderScheduleTable() {
 }
 
 // ==================== PAGE 3: PHẠT NGUỘI ====================
+// Phân loại đóng phạt: 'paid' = đã đóng (gồm eform hoàn ứng - đã nộp nhà nước), 'unpaid' = chưa đóng
+function finePaidClass(x) {
+  const p = String(x.progress || '').toLowerCase();
+  if (!p) return 'unknown';
+  if (p.indexOf('đã đóng') !== -1) return 'paid';
+  if (p.indexOf('eform') !== -1) return 'paid';
+  return 'unpaid';
+}
+
 function renderFines() {
   const f = DATA.fines;
   const progresses = {};
   f.forEach(x => { if(x.progress) progresses[x.progress]=(progresses[x.progress]||0)+1; });
-  const pending = f.filter(x => x.progress === 'Chưa Làm Việc Với Tài Xế' || x.progress === 'Pending').length;
-  const processing = f.filter(x => x.progress === 'Đang Xử Lý Với Tài Xế').length;
-  const done = f.filter(x => x.progress === 'Tạo eform hoàn ứng').length;
+
+  const plates = {};
+  f.forEach(x => { const p = x.plate || 'N/A'; plates[p] = (plates[p] || 0) + 1; });
+  const numVehicles = Object.keys(plates).length;
+
+  let paidN = 0, paidC = 0, unpaidN = 0, unpaidC = 0, unknownN = 0;
+  f.forEach(x => {
+    const c = parseCost(x.cost);
+    const cls = finePaidClass(x);
+    if (cls === 'paid') { paidN++; paidC += c; }
+    else if (cls === 'unpaid') { unpaidN++; unpaidC += c; }
+    else unknownN++;
+  });
   const totalCost = f.reduce((s,x) => s + (parseCost(x.cost)), 0);
 
   document.getElementById('finesKPIs').innerHTML = makeKPI([
-    {l:'Tổng vụ', v:f.length, c:'blue', i:'🚨'},
-    {l:'Chưa xử lý', v:pending, c:'red', i:'⏳'},
-    {l:'Đang xử lý', v:processing, c:'orange', i:'🔄'},
-    {l:'Đã tạo eform', v:done, c:'green', i:'✅'},
-    {l:'Tổng chi phí', v:fmt(totalCost)+'₫', c:'purple', i:'💰'}
+    {l:'Tổng vụ / Số xe dính phạt', v:f.length + ' / ' + numVehicles, c:'blue', i:'🚨'},
+    {l:'Tổng chi phí phạt', v:fmt(totalCost)+'₫', c:'purple', i:'💰'},
+    {l:'Đã đóng phạt ('+paidN+' vụ)', v:fmt(paidC)+'₫', c:'green', i:'✅'},
+    {l:'Chưa đóng ('+unpaidN+' vụ)', v:fmt(unpaidC)+'₫', c:'red', i:'⏳'},
+    {l:'Tỷ lệ đã đóng (theo vụ)', v:(paidN+unpaidN)?Math.round(paidN*100/(paidN+unpaidN))+'%':'—', c:'orange', i:'📊'}
   ]);
 
-  // Update badges
-  document.getElementById('finesBadge').textContent = pending;
-  document.getElementById('headerAlertBadge').textContent = pending;
+  // Badge = số vụ chưa đóng phạt
+  document.getElementById('finesBadge').textContent = unpaidN;
+  document.getElementById('headerAlertBadge').textContent = unpaidN;
 
   populateSelect('filterFineProgress', Object.keys(progresses).sort());
+  renderFinesByVehicle();
   renderFinesTable();
+}
+
+// Tổng hợp phạt nguội theo xe: số vụ, chi phí, đã đóng/chưa đóng
+function renderFinesByVehicle() {
+  const body = document.getElementById('finesByVehicleBody');
+  if (!body) return;
+  const byVeh = {};
+  (DATA.fines || []).forEach(x => {
+    const p = x.plate || 'N/A';
+    const o = byVeh[p] || (byVeh[p] = { n: 0, cost: 0, paidN: 0, unpaidN: 0, unpaidCost: 0 });
+    const c = parseCost(x.cost);
+    o.n++; o.cost += c;
+    const cls = finePaidClass(x);
+    if (cls === 'paid') o.paidN++;
+    else if (cls === 'unpaid') { o.unpaidN++; o.unpaidCost += c; }
+  });
+  const rows = Object.entries(byVeh).sort((a, b) => b[1].cost - a[1].cost);
+  body.innerHTML = rows.map(([pl, o], i) => {
+    const st = o.unpaidN === 0
+      ? '<span class="status in_transit">Đã đóng đủ</span>'
+      : '<span class="status delayed">Còn ' + o.unpaidN + ' vụ chưa đóng</span>';
+    return '<tr><td>' + (i + 1) + '</td>' +
+      '<td style="font-weight:600;color:var(--text-primary)">' + escapeHTML(pl) + '</td>' +
+      '<td>' + o.n + '</td>' +
+      '<td style="font-weight:600">' + fmt(o.cost) + '₫</td>' +
+      '<td>' + o.paidN + '</td>' +
+      '<td>' + o.unpaidN + '</td>' +
+      '<td style="font-weight:600;color:' + (o.unpaidCost > 0 ? 'var(--danger)' : 'var(--text-muted)') + '">' + fmt(o.unpaidCost) + '₫</td>' +
+      '<td>' + st + '</td></tr>';
+  }).join('');
 }
 
 function renderFinesTable() {
@@ -604,7 +683,8 @@ function renderFinesTable() {
   if (progF) data = data.filter(x => x.progress === progF);
 
   document.getElementById('finesTableBody').innerHTML = data.map(x => {
-    const pCls = (x.progress==='Chưa Làm Việc Với Tài Xế'||x.progress==='Pending')?'delayed':x.progress==='Đang Xử Lý Với Tài Xế'?'unassigned':'assigned';
+    const paidCls = finePaidClass(x);
+    const pCls = paidCls==='paid' ? 'in_transit' : (x.progress==='Đang Xử Lý Với Tài Xế' ? 'unassigned' : 'delayed');
     const dCls = x.driverStatus === 'Đã nghỉ việc' ? 'breakdown' : 'completed';
     return `<tr>
       <td style="font-weight:600;color:var(--text-primary)">${escapeHTML(x.plate||'')}</td>
@@ -1374,6 +1454,13 @@ function processAndApplyWorkbook(workbook) {
   const fSheet = workbook.Sheets['Phạt nguội'];
   const fRows = XLSX.utils.sheet_to_json(fSheet, {header: 1, raw: true, defval: null});
   const fMap = buildColMap(fRows);
+  // Sheet có 2 cột trùng tên "Tình trạng": cột 1 = tình trạng tài xế, cột 2 = tiến độ đóng phạt.
+  // buildColMap giữ cột đầu, nên dò riêng cột "Tình trạng" CUỐI CÙNG cho tiến độ.
+  const fHdr = fRows[0] || [];
+  let fProgressCol = -1;
+  for (let c = 0; c < fHdr.length; c++) { if (normHdr(fHdr[c]) === 'tình trạng') fProgressCol = c; }
+  const fDriverStatusCol = (function(){ for (let c = 0; c < fHdr.length; c++) { if (normHdr(fHdr[c]) === 'tình trạng') return c; } return -1; })();
+  if (fProgressCol === fDriverStatusCol) fProgressCol = -1; // chỉ có 1 cột -> không dùng
   const fines = [];
   for (let i = 1; i < fRows.length; i++) {
     const row = fRows[i] || [];
@@ -1392,7 +1479,7 @@ function processAndApplyWorkbook(workbook) {
       driverName: cellS(row, fMap, 'Tài Xế'),
       driverStatus: cellS(row, fMap, 'Tình Trạng'),
       expectedDate: cellS(row, fMap, ['Ngày dự kiến xử lý xong (15 ngày)', 'Ngày dự kiến xử lý xong']),
-      progress: cellS(row, fMap, 'Tiến Độ'),
+      progress: fProgressCol >= 0 ? ser(row[fProgressCol]) : cellS(row, fMap, 'Tiến Độ'),
     });
   }
 
