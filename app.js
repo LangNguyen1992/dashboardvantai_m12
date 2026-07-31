@@ -786,6 +786,123 @@ function renderReinforcement() {
   populateSelect('filterReinfStatus', Object.keys(statuses).sort());
   populateSelect('filterReinfSupplier', Object.keys(suppliers).sort());
   renderReinforcementTable();
+  renderReinfSummary();
+}
+
+// ==== TỔNG HỢP TĂNG CƯỜNG THEO KỲ (Ngày/Tuần/Tháng) ====
+window._reinfSummaryMode = window._reinfSummaryMode || 'week';
+
+function setReinfSummaryMode(m) {
+  window._reinfSummaryMode = m;
+  renderReinfSummary();
+}
+
+// Lấy ngày phát sinh ticket: ưu tiên Timestamp (đồng bộ Sheet), fallback requestDate ISO (data.js)
+function reinfDateOf(x) {
+  var v = x.ts;
+  if (v != null && v !== '') {
+    if (typeof v === 'number' || (/^\d+(\.\d+)?$/.test(String(v).trim()) && Number(v) > 20000)) {
+      var dt = new Date(Math.round((Number(v) - 25569) * 86400000));
+      if (!isNaN(dt)) return new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+    }
+    var m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  }
+  var r = String(x.requestDate || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (r) return new Date(+r[1], +r[2] - 1, +r[3]);
+  return null;
+}
+
+function reinfISOWeek(d) {
+  var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  var day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  var y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  var wk = Math.ceil(((t - y0) / 86400000 + 1) / 7);
+  return { year: t.getUTCFullYear(), week: wk };
+}
+
+function renderReinfSummary() {
+  var body = document.getElementById('reinfSummaryBody');
+  if (!body) return;
+  var mode = window._reinfSummaryMode;
+
+  // nút active
+  document.querySelectorAll('.reinf-period-btn').forEach(function (b) {
+    var on = b.dataset.period === mode;
+    b.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;font-weight:' +
+      (on ? '700;background:var(--accent);color:#fff' : '400;background:var(--bg-card);color:var(--text-secondary)');
+  });
+
+  var groups = {}; // key -> {label, sortKey, t, ok, no, cancel}
+  (DATA.reinforcement || []).forEach(function (x) {
+    var d = reinfDateOf(x);
+    if (!d) return;
+    var key, label, sortKey;
+    if (mode === 'day') {
+      sortKey = d.getTime(); key = d.toISOString().slice(0, 10);
+      label = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    } else if (mode === 'week') {
+      var iw = reinfISOWeek(d);
+      key = iw.year + '-W' + ('0' + iw.week).slice(-2);
+      var mon = new Date(d); var wd = (d.getDay() || 7); mon.setDate(d.getDate() - wd + 1);
+      var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      sortKey = mon.getTime();
+      label = 'W' + ('0' + iw.week).slice(-2) + ' (' + ('0' + mon.getDate()).slice(-2) + '/' + ('0' + (mon.getMonth() + 1)).slice(-2) +
+        '–' + ('0' + sun.getDate()).slice(-2) + '/' + ('0' + (sun.getMonth() + 1)).slice(-2) + ')';
+    } else {
+      key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+      sortKey = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      label = ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    }
+    var g = groups[key] || (groups[key] = { label: label, sortKey: sortKey, t: 0, ok: 0, no: 0, cancel: 0 });
+    g.t++;
+    var st = String(x.status || '');
+    if (/^có xe/i.test(st)) g.ok++;
+    else if (/^không có xe/i.test(st)) g.no++;
+    else if (/^hủy/i.test(st)) g.cancel++;
+  });
+
+  var list = Object.keys(groups).map(function (k) { return groups[k]; }).sort(function (a, b) { return a.sortKey - b.sortKey; });
+  if (!list.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu</td></tr>'; return; }
+
+  // tính Δ theo thứ tự thời gian
+  list.forEach(function (g, i) {
+    g.real = g.ok + g.no;
+    g.rate = g.real ? g.ok / g.real : null;
+    var p = list[i - 1];
+    g.dT = p ? g.t - p.t : null;
+    g.dRate = (p && p.rate != null && g.rate != null) ? (g.rate - p.rate) * 100 : null;
+  });
+
+  var totalRow = list.reduce(function (s, g) { s.t += g.t; s.ok += g.ok; s.no += g.no; s.cancel += g.cancel; return s; }, { t: 0, ok: 0, no: 0, cancel: 0 });
+  totalRow.real = totalRow.ok + totalRow.no;
+  totalRow.rate = totalRow.real ? totalRow.ok / totalRow.real : null;
+
+  function rateCell(r) {
+    if (r == null) return '<td>—</td>';
+    var pct = (r * 100).toFixed(1) + '%';
+    var col = r >= 0.9 ? 'var(--success)' : (r >= 0.8 ? 'var(--warning)' : 'var(--danger)');
+    return '<td style="font-weight:700;color:' + col + '">' + pct + '</td>';
+  }
+  function deltaCell(v, suffix) {
+    if (v == null) return '<td>—</td>';
+    var s = (v > 0 ? '+' : '') + (suffix ? v.toFixed(1) : v);
+    var col = v > 0 ? 'var(--success)' : (v < 0 ? 'var(--danger)' : 'var(--text-muted)');
+    return '<td style="color:' + col + ';font-weight:600">' + s + (suffix || '') + '</td>';
+  }
+
+  // hiển thị kỳ mới nhất trước
+  var html = list.slice().reverse().map(function (g) {
+    return '<tr><td style="font-weight:600">' + escapeHTML(g.label) + '</td>' +
+      '<td>' + g.t + '</td><td>' + g.ok + '</td><td>' + g.no + '</td><td>' + g.cancel + '</td><td>' + g.real + '</td>' +
+      rateCell(g.rate) + deltaCell(g.dT, '') + deltaCell(g.dRate, ' đ%') + '</tr>';
+  }).join('');
+  html += '<tr style="background:var(--accent-light)"><td style="font-weight:800">TỔNG</td>' +
+    '<td style="font-weight:800">' + totalRow.t + '</td><td style="font-weight:800">' + totalRow.ok + '</td>' +
+    '<td style="font-weight:800">' + totalRow.no + '</td><td style="font-weight:800">' + totalRow.cancel + '</td>' +
+    '<td style="font-weight:800">' + totalRow.real + '</td>' + rateCell(totalRow.rate) + '<td>—</td><td>—</td></tr>';
+  body.innerHTML = html;
 }
 
 function renderReinforcementTable() {
@@ -1350,6 +1467,7 @@ function processAndApplyWorkbook(workbook) {
     if (!tid) continue;
     reinforcement.push({
       ticketId: tid,
+      ts: cellS(row, rfMap, 'Timestamp'),
       region: cellS(row, rfMap, 'Vùng'),
       warehouse: cellS(row, rfMap, ['warehouse', 'Bưu cục', 'Kho']),
       route: cellS(row, rfMap, 'Lộ trình'),

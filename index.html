@@ -606,6 +606,40 @@
       <!-- ============ PAGE 6: TĂNG CƯỜNG LẤY ============ -->
       <div class="page" id="page-reinforcement">
         <div class="kpi-grid" id="reinforcementKPIs"></div>
+
+        <!-- TỔNG HỢP THEO KỲ (Ngày / Tuần / Tháng) -->
+        <div class="table-card">
+          <div class="table-header">
+            <h3>📊 Tổng hợp nhu cầu &amp; đáp ứng theo kỳ</h3>
+            <div style="display:flex;gap:6px">
+              <button class="reinf-period-btn" data-period="day" onclick="setReinfSummaryMode('day')">Theo ngày</button>
+              <button class="reinf-period-btn" data-period="week" onclick="setReinfSummaryMode('week')">Theo tuần</button>
+              <button class="reinf-period-btn" data-period="month" onclick="setReinfSummaryMode('month')">Theo tháng</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kỳ</th>
+                  <th>Tổng yêu cầu</th>
+                  <th>Có xe (đáp ứng)</th>
+                  <th>Không có xe</th>
+                  <th>Hủy</th>
+                  <th>Nhu cầu thực</th>
+                  <th>% Đáp ứng</th>
+                  <th>Δ Yêu cầu</th>
+                  <th>Δ % Đáp ứng</th>
+                </tr>
+              </thead>
+              <tbody id="reinfSummaryBody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);padding:8px 4px 0">
+            Kỳ tính theo ngày tạo ticket. Nhu cầu thực = Có xe + Không có xe (loại Hủy). Δ so với kỳ liền trước.
+          </div>
+        </div>
+
         <div class="table-card">
           <div class="table-header">
             <h3>📦 Danh sách yêu cầu tải tăng cường</h3>
