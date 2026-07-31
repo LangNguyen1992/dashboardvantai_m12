@@ -798,12 +798,19 @@ function setReinfSummaryMode(m) {
 }
 
 // Lấy ngày phát sinh ticket: ưu tiên Timestamp (đồng bộ Sheet), fallback requestDate ISO (data.js)
+// LƯU Ý dữ liệu gốc: trên Sheet, Timestamp nhập dd/mm nhưng Google hiểu nhầm mm/dd với ngày <=12
+// => ô bị ép thành DATE (serial) với ngày/tháng ĐẢO; ngày >12 giữ nguyên TEXT dd/mm (đúng).
+// Quy tắc khôi phục: chuỗi -> đọc dd/mm; serial -> đảo ngược ngày<->tháng.
 function reinfDateOf(x) {
   var v = x.ts;
   if (v != null && v !== '') {
     if (typeof v === 'number' || (/^\d+(\.\d+)?$/.test(String(v).trim()) && Number(v) > 20000)) {
       var dt = new Date(Math.round((Number(v) - 25569) * 86400000));
-      if (!isNaN(dt)) return new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+      if (!isNaN(dt)) {
+        var Y = dt.getUTCFullYear(), M = dt.getUTCMonth() + 1, D = dt.getUTCDate();
+        if (D <= 12) return new Date(Y, D - 1, M); // đảo lại về ngày thật
+        return new Date(Y, M - 1, D); // phòng hờ: serial hợp lệ hiếm gặp
+      }
     }
     var m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
