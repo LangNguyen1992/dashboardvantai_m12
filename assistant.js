@@ -982,8 +982,9 @@
         else cb(new Error(friendlyLLMError(o.j, o.s)));
       }).catch(function (e) { cb(e); });
     } else {
-      var base = settings.baseURL || 'https://api.openai.com/v1';
-      var m2 = settings.model || 'gpt-4o-mini';
+      var isGroq = settings.provider === 'groq';
+      var base = settings.baseURL || (isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1');
+      var m2 = settings.model || (isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini');
       fetch(base.replace(/\/$/, '') + '/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + settings.apiKey },
@@ -1078,6 +1079,7 @@
         '<label>Bộ não trả lời</label>' +
         '<select id="gaProvider">' +
           '<option value="local">Chỉ máy nội bộ (miễn phí, riêng tư)</option>' +
+          '<option value="groq">Groq — Llama (key miễn phí tại console.groq.com)</option>' +
           '<option value="openai">OpenAI-compatible (API key)</option>' +
           '<option value="anthropic">Anthropic Claude (API key)</option>' +
         '</select>' +
@@ -1164,6 +1166,7 @@
   function modeName() {
     if (settings.provider === 'local') return 'Máy nội bộ';
     if (settings.provider === 'anthropic') return 'Claude' + (settings.apiKey ? '' : ' (chưa có key)');
+    if (settings.provider === 'groq') return 'Groq Llama' + (settings.apiKey ? '' : ' (chưa có key)');
     return 'OpenAI' + (settings.apiKey ? '' : ' (chưa có key)');
   }
   function updateModeLabel() {
