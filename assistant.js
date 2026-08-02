@@ -893,35 +893,89 @@
   }
 
   // ==================================================================== LLM
-  function buildSnapshot() {
+  // Snapshot GỌN: gửi số liệu đã tổng hợp (không gửi dữ liệu thô) để vừa hạn mức
+  // token của LLM miễn phí (Groq...) và trả lời nhanh, chính xác hơn.
+  function buildSnapshot(question) {
     var d = getDATA();
     var mask = settings.maskPII;
-    function maskName(s, i) { return mask ? ('NV#' + i) : s; }
+    var qn = noAccent(question || '');
+
+    // Đội xe: đếm theo tình trạng + danh sách giấy tờ quá hạn/sắp hết hạn
+    var v = arr('vehicles');
+    var vByStatus = {}; v.forEach(function (x) { var s = x.status || 'Không rõ'; vByStatus[s] = (vByStatus[s] || 0) + 1; });
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var expiring = [];
+    v.forEach(function (x) {
+      [['Đăng kiểm', 'inspectionExpiry'], ['Phù hiệu', 'badgeExpiry'], ['Phí đường bộ', 'roadFeeExpiry'], ['BH dân sự', 'liabilityExpiry']].forEach(function (p) {
+        var dt = parseDate(x[p[1]]); if (!dt) return;
+        var days = Math.round((dt - today) / 86400000);
+        if (days <= 30) expiring.push({ bks: x.plate, loai: p[0], han: fmtDate(dt), con_ngay: days });
+      });
+    });
+    expiring.sort(function (a, b) { return a.con_ngay - b.con_ngay; });
+
+    // Phạt nguội: 48 vụ nhỏ -> gửi compact toàn bộ
+    var fines = arr('fines').map(function (x) {
+      return { bks: x.plate, ngay: x.violationTime || x.reportDate, loi: x.violation, tien: parseMoney(x.cost),
+        sup: x.sup, tinh_trang_tx: x.driverStatus, tien_do: x.progress,
+        tai_xe: mask ? '(ẩn)' : x.driverName };
+    });
+
+    // BTBD: chỉ tổng hợp
+    var b = arr('btbd');
+    var bTotal = b.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var bByVeh = {};
+    b.forEach(function (x) { var p = x.plate || 'N/A'; var o = bByVeh[p] || (bByVeh[p] = { luot: 0, chi_phi: 0 }); o.luot++; o.chi_phi += parseMoney(x.cost); });
+    var bTop = Object.keys(bByVeh).map(function (p) { return { bks: p, luot: bByVeh[p].luot, chi_phi: bByVeh[p].chi_phi }; })
+      .sort(function (a, b2) { return b2.chi_phi - a.chi_phi; }).slice(0, 10);
+    var bInShop = b.filter(function (x) { return !x.outDate || String(x.outDate).trim() === ''; })
+      .slice(0, 25).map(function (x) { return { bks: x.plate, vao: x.inDate, noi_dung: x.content, gara: x.garage, du_kien_xong: x.expectedDate }; });
+
+    // Tăng cường & phạt & BTBD theo tháng (dùng module phân tích)
+    var rm = reinfMonthly(), fm = finesMonthly(), bm = btbdMonthly();
+    var rmOut = {}; Object.keys(rm).sort().forEach(function (k) { var o = rm[k]; var real = o.ok + o.no; rmOut[k] = { yeu_cau: o.t, co_xe: o.ok, khong_xe: o.no, huy: o.cancel, ty_le_dap_ung: real ? +(o.ok / real * 100).toFixed(1) : null }; });
+    var bmOut = {}; Object.keys(bm).sort().slice(-8).forEach(function (k) { bmOut[k] = { luot: bm[k].n, chi_phi: bm[k].cost }; });
+    var fmOut = {}; Object.keys(fm).sort().forEach(function (k) { var o = fm[k]; fmOut[k] = { vu: o.n, tien: o.cost, da_dong_vu: o.paidN, chua_dong_vu: o.unpaidN, tien_chua_dong: o.unpaidC }; });
+
+    // Lịch tải: đếm theo loại hình + NCC
+    var routes = arr('routes');
+    var rByType = {}, rByNCC = {};
+    routes.forEach(function (x) { var t = x.type || 'Khác'; rByType[t] = (rByType[t] || 0) + 1; var n = x.supplier || 'Khác'; rByNCC[n] = (rByNCC[n] || 0) + 1; });
+
+    // Nhân sự: đếm
+    var drv = arr('drivers');
+    var dByStatus = {}, dByPos = {};
+    drv.forEach(function (x) { var s = x.status || '?'; dByStatus[s] = (dByStatus[s] || 0) + 1; var p = x.position || '?'; dByPos[p] = (dByPos[p] || 0) + 1; });
+
+    // Hiệu suất
+    var eff = arr('efficiency');
+    var effVals = eff.map(function (x) { return typeof x.efficiency === 'number' ? x.efficiency : null; }).filter(function (x) { return x != null; });
+    var effAvg = effVals.length ? +(effVals.reduce(function (s, x) { return s + x; }, 0) / effVals.length).toFixed(1) : null;
+    var effLow = eff.filter(function (x) { return typeof x.efficiency === 'number' && x.efficiency < 50; })
+      .slice(0, 15).map(function (x) { return { bks: x.plate, hieu_suat: x.efficiency, tinh_trang: x.opStatus }; });
+
     var snap = {
-      tong_quan: {
-        so_xe: arr('vehicles').length,
-        so_nhan_su: arr('drivers').length,
-        so_tuyen: arr('routes').length,
-        so_phat_nguoi: arr('fines').length,
-        so_btbd: arr('btbd').length,
-        so_tang_cuong: arr('reinforcement').length
-      },
-      vehicles: arr('vehicles').slice(0, 300),
-      routes: arr('routes').slice(0, 300),
-      fines: arr('fines').slice(0, 300).map(function (x) {
-        return Object.assign({}, x, mask ? { driverName: '(ẩn)', driverId: '(ẩn)' } : {});
-      }),
-      btbd: arr('btbd').slice(0, 300),
-      reinforcement: arr('reinforcement').slice(0, 300).map(function (x) {
-        return Object.assign({}, x, mask ? { phone: '(ẩn)', employeeId: '(ẩn)', driverInfo: '(ẩn)' } : {});
-      }),
-      efficiency: arr('efficiency').slice(0, 300),
-      drivers: arr('drivers').slice(0, 300).map(function (x, i) {
-        return mask ? { name: maskName(x.name, i), position: x.position, route: x.route, status: x.status, seniority: x.seniority }
-          : x;
-      }),
+      ghi_chu: 'Số liệu đã tổng hợp từ dashboard vận tải M12. Tiền: VND. ty_le_dap_ung: %.',
+      tong_quan: { so_xe: v.length, nhan_su: drv.length, tuyen: routes.length, vu_phat: fines.length, luot_btbd: b.length, ticket_tang_cuong: arr('reinforcement').length },
+      doi_xe: { theo_tinh_trang: vByStatus, giay_to_het_han_30_ngay: expiring.slice(0, 40), hieu_suat_trung_binh: effAvg, xe_hieu_suat_thap: effLow },
+      phat_nguoi: { theo_thang: fmOut, danh_sach_48_vu: fines },
+      btbd: { tong_luot: b.length, tong_chi_phi: bTotal, theo_thang_gan_nhat: bmOut, top10_xe_chi_phi: bTop, dang_o_xuong: bInShop },
+      tang_cuong: { theo_thang: rmOut },
+      lich_tai: { theo_loai_hinh: rByType, theo_ncc: rByNCC },
+      nhan_su: { theo_tinh_trang: dByStatus, theo_chuc_danh: dByPos },
       ontime: d.ontime || {}
     };
+
+    // Nếu câu hỏi nhắc biển số cụ thể -> đính kèm hồ sơ chi tiết xe đó
+    var plate = plateIn(question || '');
+    if (plate) {
+      var pk = plateKey(plate);
+      snap.ho_so_xe_duoc_hoi = {
+        xe: v.filter(function (x) { return plateKey(x.plate).indexOf(pk) !== -1; }).slice(0, 3),
+        phat: arr('fines').filter(function (x) { return plateKey(x.plate).indexOf(pk) !== -1; }).slice(0, 20),
+        btbd: b.filter(function (x) { return plateKey(x.plate).indexOf(pk) !== -1; }).slice(0, 20)
+      };
+    }
     return snap;
   }
 
@@ -937,8 +991,8 @@
   function pushHist(role, content) {
     var txt = String(content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     if (!txt) return;
-    chatHist.push({ role: role, content: txt.slice(0, 2500) });
-    if (chatHist.length > 12) chatHist = chatHist.slice(-12);
+    chatHist.push({ role: role, content: txt.slice(0, 800) });
+    if (chatHist.length > 8) chatHist = chatHist.slice(-8);
   }
   function histMessages(question) {
     // đảm bảo xen kẽ user/assistant (Anthropic yêu cầu), gộp lượt trùng vai
@@ -962,12 +1016,14 @@
       return 'Tên model không tồn tại. Để TRỐNG ô Model sẽ tự dùng model mặc định' + (pv === 'groq' ? ' (llama-3.3-70b-versatile)' : pv === 'anthropic' ? ' (claude-3-5-haiku-latest)' : ' (gpt-4o-mini)') + '.';
     if (status === 429 || /quota|billing|insufficient|rate limit/i.test(raw))
       return pv === 'groq' ? 'Chạm giới hạn lượt miễn phí của Groq — đợi ~1 phút rồi hỏi lại.' : 'Hết hạn mức/chưa nạp credit API. Kiểm tra billing của nhà cung cấp.';
+    if (status === 413 || /reduce the length|too large|context.length|maximum context/i.test(raw))
+      return 'Dữ liệu gửi kèm quá dài so với hạn mức model. Thử hỏi lại (bản mới đã nén dữ liệu), hoặc hỏi hẹp hơn theo 1 chủ đề.';
     return raw || 'LLM không trả lời.';
   }
 
   function callLLM(question, cb) {
     var snap;
-    try { snap = JSON.stringify(buildSnapshot()); } catch (e) { snap = '{}'; }
+    try { snap = JSON.stringify(buildSnapshot(question)); } catch (e) { snap = '{}'; }
     var sys = systemPrompt() + '\n\nDỮ LIỆU:\n' + snap;
     var msgs = histMessages(question);
     if (settings.provider === 'anthropic') {
