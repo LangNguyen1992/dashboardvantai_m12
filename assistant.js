@@ -952,12 +952,16 @@
   }
   function friendlyLLMError(j, status) {
     var raw = (j && j.error && (j.error.message || j.error.type)) || '';
-    if (status === 401 || /invalid[_ ]api[_ ]key|authentication/i.test(raw))
-      return 'API key không hợp lệ. Với OpenAI: key phải tạo tại platform.openai.com (dạng sk-...), khác với tài khoản ChatGPT/ChatGPT Go.';
-    if (status === 404 || /model.*(not exist|not found)|does not exist/i.test(raw))
-      return 'Tên model không tồn tại. Điền model API thật, vd: gpt-4o-mini (OpenAI) hoặc claude-3-5-haiku-latest (Anthropic). "ChatGPT Go" là tên gói thuê bao, không phải model.';
-    if (status === 429 || /quota|billing|insufficient/i.test(raw))
-      return 'Hết hạn mức/chưa nạp credit API. Kiểm tra billing tại platform.openai.com.';
+    var pv = settings.provider;
+    var keyHint = pv === 'groq' ? 'Key Groq tạo miễn phí tại <b>console.groq.com</b> → API Keys, có dạng <b>gsk_...</b>'
+      : pv === 'anthropic' ? 'Key Anthropic tạo tại console.anthropic.com, dạng sk-ant-...'
+      : 'Key OpenAI tạo tại platform.openai.com (dạng sk-...), khác với tài khoản ChatGPT/ChatGPT Go.';
+    if (status === 401 || status === 403 || /invalid[_ ]api[_ ]key|authentication|unauthorized/i.test(raw))
+      return 'API key không hợp lệ với ' + (pv === 'groq' ? 'Groq' : pv === 'anthropic' ? 'Anthropic' : 'OpenAI') + '. ' + keyHint;
+    if (status === 404 || /model.*(not exist|not found|decommissioned)|does not exist/i.test(raw))
+      return 'Tên model không tồn tại. Để TRỐNG ô Model sẽ tự dùng model mặc định' + (pv === 'groq' ? ' (llama-3.3-70b-versatile)' : pv === 'anthropic' ? ' (claude-3-5-haiku-latest)' : ' (gpt-4o-mini)') + '.';
+    if (status === 429 || /quota|billing|insufficient|rate limit/i.test(raw))
+      return pv === 'groq' ? 'Chạm giới hạn lượt miễn phí của Groq — đợi ~1 phút rồi hỏi lại.' : 'Hết hạn mức/chưa nạp credit API. Kiểm tra billing của nhà cung cấp.';
     return raw || 'LLM không trả lời.';
   }
 
@@ -1150,6 +1154,13 @@
       if (settings.provider === 'openai' && settings.model && /\s|chatgpt/i.test(settings.model)) {
         warn = note('⚠️ Model "' + esc(settings.model) + '" có vẻ không phải tên model API. "ChatGPT Go/Plus" là gói thuê bao ứng dụng, không dùng cho API. ' +
           'Hãy điền model thật, vd: <b>gpt-4o-mini</b>. API key phải tạo tại <b>platform.openai.com</b> (dạng sk-...) và có credit.');
+      }
+      if (settings.provider === 'groq' && settings.apiKey && settings.apiKey.indexOf('gsk_') !== 0) {
+        warn = note('⚠️ Key đang dán <b>không phải key Groq</b> (key Groq bắt đầu bằng <b>gsk_</b>). ' +
+          'Tạo key miễn phí: vào <b>console.groq.com</b> → đăng nhập Google → menu <b>API Keys</b> → Create API Key → copy chuỗi gsk_... dán vào đây.');
+      }
+      if (settings.provider === 'groq' && settings.model && /chatgpt|gpt-/i.test(settings.model)) {
+        warn += note('⚠️ Groq không chạy model "' + esc(settings.model) + '". Hãy ĐỂ TRỐNG ô Model (tự dùng llama-3.3-70b-versatile).');
       }
       if (settings.provider !== 'local' && settings.apiKey && !warn) {
         warn = note('💡 Mẹo: bật "Luôn ưu tiên LLM" nếu muốn mọi câu đều do AI trả lời như ChatGPT; để tắt thì máy nội bộ trả trước, AI chỉ nhận câu khó.');
