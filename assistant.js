@@ -955,7 +955,7 @@
       .slice(0, 15).map(function (x) { return { bks: x.plate, hieu_suat: x.efficiency, tinh_trang: x.opStatus }; });
 
     var snap = {
-      ghi_chu: 'Số liệu đã tổng hợp từ dashboard vận tải M12. Tiền: VND. ty_le_dap_ung: %.',
+      ghi_chu: 'Số liệu đã tổng hợp từ dashboard vận tải M12. Tiền: VND. ty_le_dap_ung: %. QUAN TRỌNG: khóa tháng dạng YYYY-MM, ví dụ "2026-07" nghĩa là THÁNG 7/2026 — khi người dùng hỏi "tháng 7" hãy tra khóa "2026-07". Ngày dạng DD/MM/YYYY.',
       tong_quan: { so_xe: v.length, nhan_su: drv.length, tuyen: routes.length, vu_phat: fines.length, luot_btbd: b.length, ticket_tang_cuong: arr('reinforcement').length },
       doi_xe: { theo_tinh_trang: vByStatus, giay_to_het_han_30_ngay: expiring.slice(0, 40), hieu_suat_trung_binh: effAvg, xe_hieu_suat_thap: effLow },
       phat_nguoi: { theo_thang: fmOut, danh_sach_48_vu: fines },
