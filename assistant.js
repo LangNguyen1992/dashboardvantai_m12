@@ -926,15 +926,46 @@
   }
 
   function systemPrompt() {
-    return 'Bạn là trợ lý phân tích dữ liệu vận hành xe tải của GHN (Cụm M12 - KTC HCM). ' +
-      'Chỉ trả lời DỰA TRÊN dữ liệu JSON được cung cấp dưới đây; nếu dữ liệu không đủ, nói rõ là không có thông tin. ' +
-      'Trả lời tiếng Việt, ngắn gọn, chính xác, ưu tiên số liệu và bảng. Không bịa số.';
+    return 'Bạn là trợ lý vận hành xe tải của GHN (Cụm M12 - KTC HCM), trò chuyện tự nhiên như một đồng nghiệp giàu kinh nghiệm logistics. ' +
+      'Ưu tiên trả lời DỰA TRÊN dữ liệu JSON bên dưới (xe, phạt nguội, BTBD, lịch tải, tăng cường, nhân sự, ontime); nếu dữ liệu không đủ, nói rõ và trả lời bằng kiến thức chung nếu phù hợp. ' +
+      'Khi phân tích: nêu số liệu, tỷ lệ, so sánh tăng/giảm, điểm tốt/chưa tốt, rồi khuyến nghị theo nguyên tắc 80:20. ' +
+      'Nhớ ngữ cảnh các câu trước trong hội thoại. Trả lời tiếng Việt, súc tích, dùng markdown (đậm, gạch đầu dòng) khi giúp dễ đọc. Tuyệt đối không bịa số.';
+  }
+
+  // Lịch sử hội thoại (đa lượt, như ChatGPT) — gửi kèm mỗi lần gọi LLM
+  var chatHist = []; // [{role:'user'|'assistant', content:string}]
+  function pushHist(role, content) {
+    var txt = String(content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!txt) return;
+    chatHist.push({ role: role, content: txt.slice(0, 2500) });
+    if (chatHist.length > 12) chatHist = chatHist.slice(-12);
+  }
+  function histMessages(question) {
+    // đảm bảo xen kẽ user/assistant (Anthropic yêu cầu), gộp lượt trùng vai
+    var msgs = [];
+    chatHist.concat([{ role: 'user', content: question }]).forEach(function (m) {
+      if (msgs.length && msgs[msgs.length - 1].role === m.role) msgs[msgs.length - 1].content += '\n' + m.content;
+      else msgs.push({ role: m.role, content: m.content });
+    });
+    if (msgs.length && msgs[0].role !== 'user') msgs.shift();
+    return msgs;
+  }
+  function friendlyLLMError(j, status) {
+    var raw = (j && j.error && (j.error.message || j.error.type)) || '';
+    if (status === 401 || /invalid[_ ]api[_ ]key|authentication/i.test(raw))
+      return 'API key không hợp lệ. Với OpenAI: key phải tạo tại platform.openai.com (dạng sk-...), khác với tài khoản ChatGPT/ChatGPT Go.';
+    if (status === 404 || /model.*(not exist|not found)|does not exist/i.test(raw))
+      return 'Tên model không tồn tại. Điền model API thật, vd: gpt-4o-mini (OpenAI) hoặc claude-3-5-haiku-latest (Anthropic). "ChatGPT Go" là tên gói thuê bao, không phải model.';
+    if (status === 429 || /quota|billing|insufficient/i.test(raw))
+      return 'Hết hạn mức/chưa nạp credit API. Kiểm tra billing tại platform.openai.com.';
+    return raw || 'LLM không trả lời.';
   }
 
   function callLLM(question, cb) {
     var snap;
     try { snap = JSON.stringify(buildSnapshot()); } catch (e) { snap = '{}'; }
     var sys = systemPrompt() + '\n\nDỮ LIỆU:\n' + snap;
+    var msgs = histMessages(question);
     if (settings.provider === 'anthropic') {
       var model = settings.model || 'claude-3-5-haiku-latest';
       fetch('https://api.anthropic.com/v1/messages', {
@@ -945,13 +976,10 @@
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
-        body: JSON.stringify({
-          model: model, max_tokens: 1024, system: sys,
-          messages: [{ role: 'user', content: question }]
-        })
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j && j.content && j.content[0] && j.content[0].text) cb(null, j.content[0].text);
-        else cb(new Error((j && j.error && j.error.message) || 'LLM không trả lời.'));
+        body: JSON.stringify({ model: model, max_tokens: 1500, system: sys, messages: msgs })
+      }).then(function (r) { return r.json().then(function (j) { return { j: j, s: r.status }; }); }).then(function (o) {
+        if (o.j && o.j.content && o.j.content[0] && o.j.content[0].text) cb(null, o.j.content[0].text);
+        else cb(new Error(friendlyLLMError(o.j, o.s)));
       }).catch(function (e) { cb(e); });
     } else {
       var base = settings.baseURL || 'https://api.openai.com/v1';
@@ -960,12 +988,12 @@
         method: 'POST',
         headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + settings.apiKey },
         body: JSON.stringify({
-          model: m2, temperature: 0.2,
-          messages: [{ role: 'system', content: sys }, { role: 'user', content: question }]
+          model: m2, temperature: 0.3,
+          messages: [{ role: 'system', content: sys }].concat(msgs)
         })
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j && j.choices && j.choices[0] && j.choices[0].message) cb(null, j.choices[0].message.content);
-        else cb(new Error((j && j.error && j.error.message) || 'LLM không trả lời.'));
+      }).then(function (r) { return r.json().then(function (j) { return { j: j, s: r.status }; }); }).then(function (o) {
+        if (o.j && o.j.choices && o.j.choices[0] && o.j.choices[0].message) cb(null, o.j.choices[0].message.content);
+        else cb(new Error(friendlyLLMError(o.j, o.s)));
       }).catch(function (e) { cb(e); });
     }
   }
@@ -1116,7 +1144,15 @@
       saveSettings(settings);
       updateModeLabel();
       toggleSettings();
-      addMsg('a', note('✅ Đã lưu cài đặt. Bộ não hiện tại: <b>' + modeName() + '</b>.'));
+      var warn = '';
+      if (settings.provider === 'openai' && settings.model && /\s|chatgpt/i.test(settings.model)) {
+        warn = note('⚠️ Model "' + esc(settings.model) + '" có vẻ không phải tên model API. "ChatGPT Go/Plus" là gói thuê bao ứng dụng, không dùng cho API. ' +
+          'Hãy điền model thật, vd: <b>gpt-4o-mini</b>. API key phải tạo tại <b>platform.openai.com</b> (dạng sk-...) và có credit.');
+      }
+      if (settings.provider !== 'local' && settings.apiKey && !warn) {
+        warn = note('💡 Mẹo: bật "Luôn ưu tiên LLM" nếu muốn mọi câu đều do AI trả lời như ChatGPT; để tắt thì máy nội bộ trả trước, AI chỉ nhận câu khó.');
+      }
+      addMsg('a', note('✅ Đã lưu cài đặt. Bộ não hiện tại: <b>' + modeName() + '</b>.') + warn);
     });
 
     // greeting
@@ -1174,6 +1210,7 @@
   }
 
   function handleQuestion(q) {
+    pushHist('user', q);
     var forceLLM = llmReady() && settings.preferLLM;
     var local = forceLLM ? { matched: false } : runLocal(q);
 
@@ -1181,16 +1218,18 @@
       var b = addMsg('a', local.answer);
       var s = document.createElement('div'); s.className = 'ga-src'; s.textContent = 'Nguồn: dữ liệu dashboard (máy nội bộ)';
       b.appendChild(s);
+      pushHist('assistant', local.answer);
       return;
     }
 
     if (llmReady()) {
       var typing = addMsg('a', '<span class="ga-typing">Đang hỏi ' + esc(modeName()) + '…</span>');
       callLLM(q, function (err, text) {
-        if (err) { typing.innerHTML = note('❌ Lỗi gọi LLM: ' + esc(err.message || String(err)) + '<br>Kiểm tra API key/model/kết nối trong ⚙️ Cài đặt.'); return; }
+        if (err) { typing.innerHTML = note('❌ ' + esc(err.message || String(err)) + '<br>Kiểm tra lại ở ⚙️ Cài đặt.'); return; }
         typing.innerHTML = mdToHtml(text);
         var s = document.createElement('div'); s.className = 'ga-src'; s.textContent = 'Nguồn: ' + modeName() + ' (dựa trên dữ liệu dashboard)';
         typing.appendChild(s);
+        pushHist('assistant', text);
       });
       return;
     }
