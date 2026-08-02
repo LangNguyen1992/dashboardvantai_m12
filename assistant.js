@@ -108,6 +108,19 @@
       return { answer: helpText(), matched: true };
     }
 
+    // 0.5) CHẾ ĐỘ PHÂN TÍCH: tổng hợp / phân tích / so sánh / nhận xét / khuyến nghị
+    var anaTopic = topicOf(q);
+    var strongAna = has(q, ['phan tich', 'tong hop', 'bao cao', 'tong quan', 'tinh hinh', 'danh gia', 'xu huong', 'khuyen nghi', 'de xuat', 'insight', 'nhan xet']);
+    var wantCompare = has(q, ['so sanh', ' vs ', 'doi chieu']);
+    var monthsAsked = monthsIn(q);
+    if (strongAna || wantCompare || (monthsAsked.length && (anaTopic || lastTopic))) {
+      var topic = anaTopic || lastTopic || 'overview';
+      lastTopic = (topic === 'overview') ? lastTopic : topic;
+      if (wantCompare || monthsAsked.length >= 2) return { answer: compareMonths(topic, monthsAsked), matched: true };
+      if (monthsAsked.length === 1) return { answer: analyzeMonth(topic, monthsAsked[0]), matched: true };
+      return { answer: analyzeTopic(topic), matched: true };
+    }
+
     // 1) Hạn giấy tờ sắp hết / quá hạn
     if (has(q, ['het han', 'sap het', 'qua han', 'con han', 'sap toi han'])) {
       return { answer: answerExpiry(q), matched: true };
@@ -166,17 +179,19 @@
 
   // --------------------------------------------------------- Intent handlers
   function helpText() {
-    return '<b>Trợ lý Hỏi–Đáp dữ liệu Dashboard.</b> Bạn có thể hỏi ví dụ:' +
+    return '<b>Trợ lý Hỏi–Đáp & Phân tích dữ liệu Dashboard.</b>' +
+      '<div style="margin-top:4px"><b>🧠 Phân tích - tổng hợp:</b></div>' +
       '<ul class="ga-ul">' +
-      '<li>Xe nào sắp hết hạn đăng kiểm / phù hiệu / phí đường bộ?</li>' +
-      '<li>Thông tin biển số 51C-123.45</li>' +
-      '<li>Có bao nhiêu xe đang hoạt động? Bao nhiêu tài xế đang làm việc?</li>' +
-      '<li>Phạt nguội của SUP … / còn bao nhiêu vụ chưa xử lý / tổng tiền phạt?</li>' +
-      '<li>Xe nào đang ở xưởng? Top xe vào xưởng nhiều nhất? Tổng chi phí BTBD?</li>' +
-      '<li>Tuyến của NCC … / các tuyến Lấy / tuyến của kho …</li>' +
-      '<li>Tài xế tên … / nhân sự chức danh … / yêu cầu tăng cường của bưu cục …</li>' +
+      '<li>Phân tích tổng quan / phạt nguội / tăng cường / BTBD / chi phí / đội xe</li>' +
+      '<li>So sánh tăng cường tháng 6 và tháng 7 • Phạt nguội tháng 7 thế nào?</li>' +
+      '<li>Sau đó hỏi tiếp gọn: "còn tháng 5?" — trợ lý nhớ ngữ cảnh</li>' +
       '</ul>' +
-      note('Máy nội bộ trả lời tức thì, không cần mạng. Câu phức tạp có thể bật LLM ở ⚙️ Cài đặt.');
+      '<div><b>🔍 Tra cứu nhanh:</b></div>' +
+      '<ul class="ga-ul">' +
+      '<li>Xe nào sắp hết hạn đăng kiểm? • Thông tin biển số 51C-123.45</li>' +
+      '<li>Phạt nguội chưa xử lý • Xe đang ở xưởng • Các tuyến Lấy • Tài xế tên …</li>' +
+      '</ul>' +
+      note('Trả lời tức thì trong trình duyệt, dữ liệu không rời máy. Bật LLM ở ⚙️ nếu cần hội thoại tự do hơn.');
   }
 
   function answerExpiry(q) {
@@ -473,6 +488,381 @@
     return '<b>Ontime theo nhóm tuyến — tuần ' + esc(wk) + '</b>' + table(['Nhóm tuyến', 'Tỷ lệ đúng giờ'], rows);
   }
 
+  // ================================================ MODULE PHÂN TÍCH ("AI mode")
+  var lastTopic = null; // ngữ cảnh hội thoại: nhớ chủ đề gần nhất
+
+  function topicOf(q) {
+    if (has(q, ['tang cuong'])) return 'reinf';
+    if (has(q, ['phat', 'vi pham'])) return 'fines';
+    if (has(q, ['btbd', 'bao tri', 'sua chua', 'xuong'])) return 'btbd';
+    if (has(q, ['chi phi'])) return 'cost';
+    if (has(q, ['ontime', 'dung gio'])) return 'ontime';
+    if (has(q, ['nhan su', 'tai xe'])) return 'staff';
+    if (has(q, ['doi xe', 'xe tai', 'phuong tien', 'dang kiem'])) return 'fleet';
+    return null;
+  }
+  function monthsIn(q) {
+    var out = []; var re = /thang\s*(\d{1,2})/g, m;
+    while ((m = re.exec(q))) { var n = parseInt(m[1], 10); if (n >= 1 && n <= 12 && out.indexOf(n) === -1) out.push(n); }
+    return out;
+  }
+  function pct(x, d) { return x == null ? '—' : (x * 100).toFixed(d == null ? 1 : d) + '%'; }
+  function arrow(v, goodUp) { // goodUp: tăng là tốt?
+    if (v == null) return '';
+    var up = v > 0, good = goodUp ? up : !up;
+    var col = v === 0 ? 'var(--text-muted)' : (good ? '#16a34a' : '#dc2626');
+    var sym = v === 0 ? '•' : (up ? '▲' : '▼');
+    return '<span style="color:' + col + ';font-weight:700">' + sym + '</span>';
+  }
+  function chips(list) {
+    return '<div class="ga-chips">' + list.map(function (c) { return '<span class="ga-chip">' + esc(c) + '</span>'; }).join('') + '</div>';
+  }
+  function secTitle(t) { return '<div style="font-weight:800;margin:8px 0 4px;color:#0e8a80">' + t + '</div>'; }
+
+  // ---- gộp theo tháng cho từng mảng dữ liệu ----
+  function monthKeyLoose(v) {
+    try { if (typeof monthKeyFromDate === 'function') return monthKeyFromDate(v); } catch (e) {}
+    if (v == null || v === '') return null;
+    var s = String(v).trim();
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + ('0' + m[2]).slice(-2);
+    m = s.match(/^(\d{4})-(\d{1,2})/); if (m) return m[1] + '-' + ('0' + m[2]).slice(-2);
+    return null;
+  }
+  function reinfMonthKey(x) {
+    try { if (typeof reinfDateOf === 'function') { var d = reinfDateOf(x); if (d) return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); } } catch (e) {}
+    return monthKeyLoose(x.ts || x.requestDate);
+  }
+  function finePaid(x) {
+    var p = noAccent(x.progress);
+    if (!p) return 'unknown';
+    if (p.indexOf('da dong') !== -1 || p.indexOf('eform') !== -1) return 'paid';
+    return 'unpaid';
+  }
+  function reinfMonthly() {
+    var by = {};
+    arr('reinforcement').forEach(function (x) {
+      var k = reinfMonthKey(x); if (!k) return;
+      var o = by[k] || (by[k] = { t: 0, ok: 0, no: 0, cancel: 0 });
+      o.t++;
+      var st = noAccent(x.status);
+      if (st.indexOf('co xe') === 0) o.ok++;
+      else if (st.indexOf('khong co xe') === 0) o.no++;
+      else if (st.indexOf('huy') === 0) o.cancel++;
+    });
+    return by;
+  }
+  function finesMonthly() {
+    var by = {};
+    arr('fines').forEach(function (x) {
+      var k = monthKeyLoose(x.violationTime || x.reportDate); if (!k) return;
+      var o = by[k] || (by[k] = { n: 0, cost: 0, paidN: 0, paidC: 0, unpaidN: 0, unpaidC: 0 });
+      var c = parseMoney(x.cost); o.n++; o.cost += c;
+      var s = finePaid(x);
+      if (s === 'paid') { o.paidN++; o.paidC += c; } else if (s === 'unpaid') { o.unpaidN++; o.unpaidC += c; }
+    });
+    return by;
+  }
+  function btbdMonthly() {
+    var by = {};
+    arr('btbd').forEach(function (x) {
+      var k = monthKeyLoose(x.inDate); if (!k) return;
+      var o = by[k] || (by[k] = { n: 0, cost: 0 });
+      o.n++; o.cost += parseMoney(x.cost);
+    });
+    return by;
+  }
+  function keyForMonth(by, mNum) { // chọn key năm mới nhất có tháng đó
+    var keys = Object.keys(by).filter(function (k) { return parseInt(k.slice(5), 10) === mNum; }).sort();
+    return keys.length ? keys[keys.length - 1] : null;
+  }
+  function prevKey(by, key) {
+    var keys = Object.keys(by).sort(); var i = keys.indexOf(key);
+    return i > 0 ? keys[i - 1] : null;
+  }
+  function lastKeys(by, n) { return Object.keys(by).sort().slice(-n); }
+  function mLabel(k) { return k ? (k.slice(5) + '/' + k.slice(0, 4)) : '—'; }
+
+  // ---- PHÂN TÍCH TỪNG CHỦ ĐỀ ----
+  function analyzeTopic(topic) {
+    if (topic === 'fines') return analyzeFines();
+    if (topic === 'reinf') return analyzeReinf();
+    if (topic === 'btbd') return analyzeBTBD();
+    if (topic === 'cost') return analyzeCost();
+    if (topic === 'fleet') return analyzeFleet();
+    if (topic === 'ontime') return answerOntime('');
+    if (topic === 'staff') return analyzeStaff();
+    return analyzeOverview();
+  }
+
+  function analyzeOverview() {
+    var v = arr('vehicles'), d = arr('drivers'), f = arr('fines'), b = arr('btbd'), r = arr('reinforcement');
+    var vAct = v.filter(function (x) { return noAccent(x.status).indexOf('hoat dong') !== -1; }).length;
+    var dAct = d.filter(function (x) { return noAccent(x.status).indexOf('dang lam') !== -1; }).length;
+    var fCost = f.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var fUnpaid = f.filter(function (x) { return finePaid(x) === 'unpaid'; });
+    var fUnpaidC = fUnpaid.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var bCost = b.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var inShop = b.filter(function (x) { return !x.outDate || String(x.outDate).trim() === ''; }).length;
+    var rm = reinfMonthly(); var rk = lastKeys(rm, 2);
+    var rLast = rk.length ? rm[rk[rk.length - 1]] : null;
+    var rPrev = rk.length > 1 ? rm[rk[0]] : null;
+    var rateL = rLast && (rLast.ok + rLast.no) ? rLast.ok / (rLast.ok + rLast.no) : null;
+    var rateP = rPrev && (rPrev.ok + rPrev.no) ? rPrev.ok / (rPrev.ok + rPrev.no) : null;
+
+    var html = '<b>📋 BÁO CÁO TỔNG QUAN VẬN HÀNH</b>' +
+      kv([
+        ['Đội xe', vAct + '/' + v.length + ' xe hoạt động'],
+        ['Nhân sự', dAct + '/' + d.length + ' đang làm việc'],
+        ['Xe đang ở xưởng (BTBD)', inShop + ' xe — tổng chi phí BTBD ' + fmtNum(bCost) + ' đ'],
+        ['Phạt nguội', f.length + ' vụ — ' + fmtNum(fCost) + ' đ (chưa đóng: ' + fUnpaid.length + ' vụ / ' + fmtNum(fUnpaidC) + ' đ)'],
+        ['Tăng cường tháng ' + (rk.length ? mLabel(rk[rk.length - 1]) : '—'), rLast ? (rLast.t + ' yêu cầu, đáp ứng ' + pct(rateL)) : '—']
+      ]);
+    var notes = [];
+    if (rateL != null && rateP != null) {
+      var dR = (rateL - rateP) * 100;
+      notes.push(arrow(dR, true) + ' Tỷ lệ đáp ứng tăng cường ' + (dR >= 0 ? 'tăng ' : 'giảm ') + Math.abs(dR).toFixed(1) + ' điểm % so tháng trước.');
+    }
+    if (fUnpaid.length) notes.push('⚠️ Còn <b>' + fUnpaid.length + ' vụ phạt chưa đóng</b> (' + fmtNum(fUnpaidC) + ' đ) — ưu tiên truy thu, nhất là tài xế sắp/đã nghỉ việc.');
+    if (inShop) notes.push('🔧 ' + inShop + ' xe đang nằm xưởng — kiểm tra ngày dự kiến xong để không hụt nguồn xe đầu tuần.');
+    html += secTitle('Nhận xét') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    html += chips(['Phân tích phạt nguội', 'Phân tích tăng cường', 'Phân tích chi phí', 'Xe nào sắp hết hạn đăng kiểm']);
+    return html;
+  }
+
+  function analyzeFines() {
+    var f = arr('fines');
+    if (!f.length) return note('Chưa có dữ liệu phạt nguội.');
+    var plates = {}; var total = 0, paidN = 0, paidC = 0, unpaidN = 0, unpaidC = 0;
+    var quitUnpaid = 0;
+    f.forEach(function (x) {
+      var c = parseMoney(x.cost); total += c;
+      var p = x.plate || 'N/A'; var o = plates[p] || (plates[p] = { n: 0, c: 0, u: 0 });
+      o.n++; o.c += c;
+      var s = finePaid(x);
+      if (s === 'paid') { paidN++; paidC += c; }
+      else if (s === 'unpaid') {
+        unpaidN++; unpaidC += c; o.u++;
+        if (noAccent(x.driverStatus).indexOf('nghi') !== -1) quitUnpaid++;
+      }
+    });
+    var top = Object.keys(plates).map(function (p) { return [p, plates[p]]; }).sort(function (a, b) { return b[1].c - a[1].c; }).slice(0, 5);
+    var bm = finesMonthly(); var mk = lastKeys(bm, 4);
+
+    var html = '<b>🚨 PHÂN TÍCH PHẠT NGUỘI</b>' +
+      kv([
+        ['Tổng vụ / số xe', f.length + ' vụ / ' + Object.keys(plates).length + ' xe'],
+        ['Tổng chi phí', fmtNum(total) + ' đ'],
+        ['Đã đóng', paidN + ' vụ — ' + fmtNum(paidC) + ' đ (' + pct((paidN + unpaidN) ? paidN / (paidN + unpaidN) : null, 0) + ')'],
+        ['Chưa đóng', unpaidN + ' vụ — ' + fmtNum(unpaidC) + ' đ']
+      ]) +
+      secTitle('Top xe theo chi phí phạt') +
+      table(['BKS', 'Số vụ', 'Chi phí (đ)', 'Chưa đóng'], top.map(function (t) { return [t[0], t[1].n, fmtNum(t[1].c), t[1].u ? (t[1].u + ' vụ') : '—']; }));
+    if (mk.length > 1) {
+      html += secTitle('Diễn biến theo tháng') +
+        table(['Tháng', 'Số vụ', 'Chi phí (đ)'], mk.map(function (k) { return [mLabel(k), bm[k].n, fmtNum(bm[k].cost)]; }));
+    }
+    var notes = [];
+    if (unpaidN) notes.push('⚠️ Tồn <b>' + unpaidN + ' vụ / ' + fmtNum(unpaidC) + ' đ</b> chưa đóng — chiếm ' + pct(total ? unpaidC / total : null, 0) + ' tổng chi phí phạt.');
+    if (quitUnpaid) notes.push('🔴 <b>' + quitUnpaid + ' vụ chưa đóng dính tài xế đã/đang nghỉ việc</b> — rủi ro mất truy thu cao nhất, xử lý trước (giữ cọc/lương còn lại).');
+    if (top.length && top[0][1].n >= 3) notes.push('🚛 Xe ' + esc(top[0][0]) + ' bị ' + top[0][1].n + ' vụ — kiểm tra tài xế phụ trách tuyến, cân nhắc đào tạo lại/đổi tài.');
+    html += secTitle('Nhận xét & khuyến nghị') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    html += chips(['Phạt nguội chưa xử lý', 'So sánh phạt nguội theo tháng', 'Phân tích chi phí']);
+    return html;
+  }
+
+  function analyzeReinf() {
+    var by = reinfMonthly();
+    var keys = Object.keys(by).sort();
+    if (!keys.length) return note('Chưa có dữ liệu tăng cường.');
+    var rows = keys.map(function (k) {
+      var o = by[k], real = o.ok + o.no;
+      return [mLabel(k), o.t, o.ok, o.no, real ? pct(o.ok / real) : '—'];
+    });
+    var tot = keys.reduce(function (s, k) { var o = by[k]; s.t += o.t; s.ok += o.ok; s.no += o.no; return s; }, { t: 0, ok: 0, no: 0 });
+    var totRate = (tot.ok + tot.no) ? tot.ok / (tot.ok + tot.no) : null;
+    var lastK = keys[keys.length - 1], prevK = keys.length > 1 ? keys[keys.length - 2] : null;
+    var l = by[lastK], p = prevK ? by[prevK] : null;
+    var lRate = (l.ok + l.no) ? l.ok / (l.ok + l.no) : null;
+    var pRate = p && (p.ok + p.no) ? p.ok / (p.ok + p.no) : null;
+
+    var html = '<b>📦 PHÂN TÍCH TẢI TĂNG CƯỜNG</b>' +
+      kv([
+        ['Toàn kỳ', tot.t + ' yêu cầu — đáp ứng ' + pct(totRate)],
+        ['Tháng gần nhất (' + mLabel(lastK) + ')', l.t + ' yêu cầu — đáp ứng ' + pct(lRate)]
+      ]) +
+      secTitle('Theo tháng') +
+      table(['Tháng', 'Yêu cầu', 'Có xe', 'Không xe', '% Đáp ứng'], rows);
+    var notes = [];
+    if (pRate != null && lRate != null) {
+      var d = (lRate - pRate) * 100;
+      notes.push(arrow(d, true) + ' Đáp ứng ' + (d >= 0 ? 'tăng' : 'giảm') + ' ' + Math.abs(d).toFixed(1) + ' điểm % so tháng ' + mLabel(prevK) + '; khối lượng ' + (l.t >= p.t ? 'tăng' : 'giảm') + ' ' + Math.abs(l.t - p.t) + ' yêu cầu.');
+    }
+    if (lRate != null && lRate < 0.85) notes.push('⚠️ Đáp ứng dưới 85% — chốt trước nguồn xe cho ngày cao điểm (thứ Hai & D+1 sau event) với NCC theo giá cam kết.');
+    if (lRate != null && lRate >= 0.9) notes.push('✅ Đáp ứng ≥90% — duy trì cơ chế điều phối hiện tại.');
+    html += secTitle('Nhận xét & khuyến nghị') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    html += chips(['So sánh tăng cường tháng ' + (prevK ? parseInt(prevK.slice(5), 10) : 6) + ' và tháng ' + parseInt(lastK.slice(5), 10), 'Yêu cầu tăng cường của NCC', 'Phân tích tổng quan']);
+    return html;
+  }
+
+  function analyzeBTBD() {
+    var b = arr('btbd');
+    if (!b.length) return note('Chưa có dữ liệu BTBD.');
+    var total = b.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var inShop = b.filter(function (x) { return !x.outDate || String(x.outDate).trim() === ''; });
+    var byVeh = {};
+    b.forEach(function (x) { var p = x.plate || 'N/A'; var o = byVeh[p] || (byVeh[p] = { n: 0, c: 0 }); o.n++; o.c += parseMoney(x.cost); });
+    var top = Object.keys(byVeh).map(function (p) { return [p, byVeh[p]]; }).sort(function (a, b2) { return b2[1].c - a[1].c; }).slice(0, 5);
+    var topShare = total ? top.reduce(function (s, t) { return s + t[1].c; }, 0) / total : 0;
+    var bm = btbdMonthly(); var mk = lastKeys(bm, 4);
+
+    var html = '<b>🔧 PHÂN TÍCH BẢO TRÌ - SỬA CHỮA (BTBD)</b>' +
+      kv([
+        ['Tổng lượt / chi phí', b.length + ' lượt — ' + fmtNum(total) + ' đ'],
+        ['Bình quân / lượt', fmtNum(b.length ? total / b.length : 0) + ' đ'],
+        ['Đang ở xưởng', inShop.length + ' xe']
+      ]) +
+      secTitle('Top xe chi phí BTBD') +
+      table(['BKS', 'Lượt', 'Chi phí (đ)'], top.map(function (t) { return [t[0], t[1].n, fmtNum(t[1].c)]; }));
+    if (mk.length > 1) {
+      html += secTitle('Theo tháng') + table(['Tháng', 'Lượt', 'Chi phí (đ)'], mk.map(function (k) { return [mLabel(k), bm[k].n, fmtNum(bm[k].cost)]; }));
+    }
+    var notes = [];
+    notes.push('📌 Top 5 xe chiếm <b>' + pct(topShare, 0) + '</b> tổng chi phí BTBD — đúng nguyên tắc 80:20, tập trung đánh giá thanh lý/đại tu nhóm này trước.');
+    if (inShop.length) notes.push('🔧 ' + inShop.length + ' xe đang nằm xưởng — đối chiếu "ngày dự kiến xong" và đôn đốc gara.');
+    html += secTitle('Nhận xét & khuyến nghị') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    html += chips(['Xe nào đang ở xưởng', 'Top xe vào xưởng nhiều nhất', 'Phân tích chi phí']);
+    return html;
+  }
+
+  function analyzeCost() {
+    var b = arr('btbd'), f = arr('fines');
+    var bC = b.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var fC = f.reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var total = bC + fC;
+    if (!total) return note('Chưa có dữ liệu chi phí.');
+    var fUnpaidC = f.filter(function (x) { return finePaid(x) === 'unpaid'; }).reduce(function (s, x) { return s + parseMoney(x.cost); }, 0);
+    var bm = btbdMonthly(); var mk = lastKeys(bm, 3);
+    var html = '<b>💰 PHÂN TÍCH CHI PHÍ VẬN HÀNH</b>' +
+      kv([
+        ['Chi phí BTBD', fmtNum(bC) + ' đ (' + pct(bC / total, 0) + ')'],
+        ['Chi phí phạt nguội', fmtNum(fC) + ' đ (' + pct(fC / total, 1) + ') — chưa thu hồi ' + fmtNum(fUnpaidC) + ' đ'],
+        ['Tổng', fmtNum(total) + ' đ']
+      ]);
+    if (mk.length) html += secTitle('BTBD 3 tháng gần nhất') + table(['Tháng', 'Lượt', 'Chi phí (đ)'], mk.map(function (k) { return [mLabel(k), bm[k].n, fmtNum(bm[k].cost)]; }));
+    var notes = ['📌 Đòn bẩy chi phí nằm ở BTBD (' + pct(bC / total, 0) + '): chuẩn hóa định mức bảo dưỡng theo KM, so giá gara định kỳ.',
+      '⚖️ Phạt nguội nhỏ về tiền nhưng là chỉ số kỷ luật vận hành — mục tiêu 100% truy thu trong 15 ngày.'];
+    var html2 = html + secTitle('Nhận xét & khuyến nghị') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    return html2 + chips(['Phân tích BTBD', 'Phân tích phạt nguội', 'Top xe chi phí BTBD']);
+  }
+
+  function analyzeFleet() {
+    var v = arr('vehicles');
+    if (!v.length) return note('Chưa có dữ liệu xe.');
+    var by = {}; v.forEach(function (x) { var s = x.status || 'Không rõ'; by[s] = (by[s] || 0) + 1; });
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var expiring = 0, overdue = 0;
+    v.forEach(function (x) {
+      ['inspectionExpiry', 'badgeExpiry', 'roadFeeExpiry', 'liabilityExpiry'].forEach(function (fld) {
+        var d = parseDate(x[fld]); if (!d) return;
+        var days = Math.round((d - today) / 86400000);
+        if (days < 0) overdue++; else if (days <= 30) expiring++;
+      });
+    });
+    var e = arr('efficiency');
+    var effVals = e.map(function (x) { return typeof x.efficiency === 'number' ? x.efficiency : null; }).filter(function (x) { return x != null; });
+    var avgEff = effVals.length ? effVals.reduce(function (s, x) { return s + x; }, 0) / effVals.length : null;
+    var html = '<b>🚛 PHÂN TÍCH ĐỘI XE</b>' +
+      kv([['Tổng xe', v.length], ['Hiệu suất sử dụng TB', avgEff != null ? avgEff.toFixed(1) + '%' : '—'],
+          ['Giấy tờ sắp hết hạn (≤30 ngày)', expiring + ' mục'], ['Giấy tờ QUÁ HẠN', overdue + ' mục']]) +
+      secTitle('Theo tình trạng') + table(['Tình trạng', 'Số xe'], Object.keys(by).map(function (k) { return [k, by[k]]; }));
+    var notes = [];
+    if (overdue) notes.push('🔴 Có <b>' + overdue + ' mục giấy tờ quá hạn</b> — dừng điều xe liên quan cho tới khi gia hạn, tránh phạt nguội kép.');
+    if (expiring) notes.push('⚠️ ' + expiring + ' mục sắp hết hạn trong 30 ngày — lên lịch đăng kiểm/gia hạn ngay tuần này.');
+    html += secTitle('Nhận xét & khuyến nghị') + notes.map(function (n) { return '<div style="margin:2px 0">' + n + '</div>'; }).join('');
+    return html + chips(['Xe nào sắp hết hạn đăng kiểm', 'Hiệu suất sử dụng xe', 'Phân tích BTBD']);
+  }
+
+  function analyzeStaff() {
+    var d = arr('drivers');
+    if (!d.length) return note('Chưa có dữ liệu nhân sự.');
+    var act = d.filter(function (x) { return noAccent(x.status).indexOf('dang lam') !== -1; }).length;
+    var quit = d.filter(function (x) { return noAccent(x.status).indexOf('nghi') !== -1; }).length;
+    var byPos = {}; d.forEach(function (x) { var p = x.position || 'Khác'; byPos[p] = (byPos[p] || 0) + 1; });
+    var html = '<b>👥 PHÂN TÍCH NHÂN SỰ</b>' +
+      kv([['Tổng', d.length], ['Đang làm việc', act], ['Đã nghỉ', quit + ' (' + pct(d.length ? quit / d.length : null, 0) + ')']]) +
+      secTitle('Theo chức danh') + table(['Chức danh', 'Số người'], Object.keys(byPos).map(function (k) { return [k, byPos[k]]; }));
+    return html + chips(['Tài xế đang làm việc', 'Phân tích tổng quan']);
+  }
+
+  // ---- THEO THÁNG CỤ THỂ & SO SÁNH ----
+  function analyzeMonth(topic, mNum) {
+    var by = topic === 'fines' ? finesMonthly() : topic === 'btbd' ? btbdMonthly() : reinfMonthly();
+    var key = keyForMonth(by, mNum);
+    if (!key) return note('Không có dữ liệu tháng ' + mNum + ' cho chủ đề này.');
+    var pk = prevKey(by, key);
+    if (topic === 'fines') {
+      var o = by[key], p = pk ? by[pk] : null;
+      var html = '<b>🚨 Phạt nguội tháng ' + mLabel(key) + '</b>' +
+        kv([['Số vụ', o.n + (p ? ' (' + (o.n >= p.n ? '+' : '') + (o.n - p.n) + ' vs ' + mLabel(pk) + ')' : '')],
+            ['Chi phí', fmtNum(o.cost) + ' đ'], ['Đã đóng', o.paidN + ' vụ — ' + fmtNum(o.paidC) + ' đ'], ['Chưa đóng', o.unpaidN + ' vụ — ' + fmtNum(o.unpaidC) + ' đ']]);
+      return html + chips(['Phân tích phạt nguội', 'So sánh phạt nguội theo tháng']);
+    }
+    if (topic === 'btbd') {
+      var o2 = by[key], p2 = pk ? by[pk] : null;
+      return '<b>🔧 BTBD tháng ' + mLabel(key) + '</b>' +
+        kv([['Lượt vào xưởng', o2.n + (p2 ? ' (' + (o2.n >= p2.n ? '+' : '') + (o2.n - p2.n) + ' vs ' + mLabel(pk) + ')' : '')],
+            ['Chi phí', fmtNum(o2.cost) + ' đ' + (p2 ? ' (' + (o2.cost >= p2.cost ? '+' : '−') + fmtNum(Math.abs(o2.cost - p2.cost)) + ')' : '')]]) +
+        chips(['Phân tích BTBD', 'Top xe chi phí BTBD']);
+    }
+    var o3 = by[key], p3 = pk ? by[pk] : null;
+    var real = o3.ok + o3.no, rate = real ? o3.ok / real : null;
+    var pReal = p3 ? p3.ok + p3.no : 0, pRate = pReal ? p3.ok / pReal : null;
+    var lines = [['Yêu cầu', o3.t + (p3 ? ' (' + (o3.t >= p3.t ? '+' : '') + (o3.t - p3.t) + ' vs ' + mLabel(pk) + ')' : '')],
+      ['Có xe / Không xe / Hủy', o3.ok + ' / ' + o3.no + ' / ' + o3.cancel],
+      ['% Đáp ứng', pct(rate) + (pRate != null && rate != null ? ' (' + ((rate - pRate) * 100 >= 0 ? '+' : '') + ((rate - pRate) * 100).toFixed(1) + ' đ% vs ' + mLabel(pk) + ')' : '')]];
+    return '<b>📦 Tăng cường tháng ' + mLabel(key) + '</b>' + kv(lines) +
+      chips(['Phân tích tăng cường', 'So sánh tăng cường theo tháng']);
+  }
+
+  function compareMonths(topic, monthsAsked) {
+    var by = topic === 'fines' ? finesMonthly() : topic === 'btbd' ? btbdMonthly() : reinfMonthly();
+    var keys;
+    if (monthsAsked.length >= 2) {
+      keys = monthsAsked.slice(0, 2).map(function (m) { return keyForMonth(by, m); }).filter(Boolean);
+    } else {
+      keys = lastKeys(by, 2);
+    }
+    if (keys.length < 2) return note('Chưa đủ dữ liệu 2 kỳ để so sánh.');
+    var a = by[keys[0]], b = by[keys[1]];
+    var la = mLabel(keys[0]), lb = mLabel(keys[1]);
+    if (topic === 'fines') {
+      return '<b>⚖️ So sánh phạt nguội: ' + la + ' vs ' + lb + '</b>' +
+        table(['Chỉ tiêu', la, lb, 'Δ'], [
+          ['Số vụ', a.n, b.n, (b.n - a.n >= 0 ? '+' : '') + (b.n - a.n)],
+          ['Chi phí (đ)', fmtNum(a.cost), fmtNum(b.cost), (b.cost - a.cost >= 0 ? '+' : '−') + fmtNum(Math.abs(b.cost - a.cost))],
+          ['Chưa đóng (vụ)', a.unpaidN, b.unpaidN, (b.unpaidN - a.unpaidN >= 0 ? '+' : '') + (b.unpaidN - a.unpaidN)]
+        ]) + chips(['Phân tích phạt nguội']);
+    }
+    if (topic === 'btbd') {
+      return '<b>⚖️ So sánh BTBD: ' + la + ' vs ' + lb + '</b>' +
+        table(['Chỉ tiêu', la, lb, 'Δ'], [
+          ['Lượt vào xưởng', a.n, b.n, (b.n - a.n >= 0 ? '+' : '') + (b.n - a.n)],
+          ['Chi phí (đ)', fmtNum(a.cost), fmtNum(b.cost), (b.cost - a.cost >= 0 ? '+' : '−') + fmtNum(Math.abs(b.cost - a.cost))]
+        ]) + chips(['Phân tích BTBD']);
+    }
+    var ra = (a.ok + a.no) ? a.ok / (a.ok + a.no) : null, rb = (b.ok + b.no) ? b.ok / (b.ok + b.no) : null;
+    var d = (ra != null && rb != null) ? (rb - ra) * 100 : null;
+    var html = '<b>⚖️ So sánh tăng cường: ' + la + ' vs ' + lb + '</b>' +
+      table(['Chỉ tiêu', la, lb, 'Δ'], [
+        ['Yêu cầu', a.t, b.t, (b.t - a.t >= 0 ? '+' : '') + (b.t - a.t)],
+        ['Có xe', a.ok, b.ok, (b.ok - a.ok >= 0 ? '+' : '') + (b.ok - a.ok)],
+        ['Không có xe', a.no, b.no, (b.no - a.no >= 0 ? '+' : '') + (b.no - a.no)],
+        ['% Đáp ứng', pct(ra), pct(rb), d != null ? ((d >= 0 ? '+' : '') + d.toFixed(1) + ' đ%') : '—']
+      ]);
+    if (d != null) html += '<div style="margin-top:4px">' + arrow(d, true) + ' ' + (d >= 0 ? 'Cải thiện' : 'Suy giảm') + ' ' + Math.abs(d).toFixed(1) + ' điểm % về khả năng đáp ứng.' + '</div>';
+    return html + chips(['Phân tích tăng cường']);
+  }
+
   // ------------------------------------------------------- small formatters
   function kpi(label, value, sub) {
     return '<div class="ga-kpi"><div class="ga-kpi-v">' + esc(value) + '</div>' +
@@ -696,6 +1086,14 @@
     };
 
     fab.addEventListener('click', togglePanel);
+    // Chips (gợi ý câu hỏi) — click ủy quyền, hoạt động cả với chips trong câu trả lời
+    els.body.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.classList && t.classList.contains('ga-chip')) {
+        els.input.value = t.textContent;
+        onSend();
+      }
+    });
     els.closeBtn.addEventListener('click', function () { panel.classList.remove('open'); });
     els.setBtn.addEventListener('click', toggleSettings);
     els.send.addEventListener('click', onSend);
@@ -753,13 +1151,9 @@
   }
 
   function renderChips() {
-    var chips = ['Xe sắp hết hạn đăng kiểm', 'Bao nhiêu xe đang hoạt động', 'Phạt nguội chưa xử lý', 'Xe đang ở xưởng', 'Các tuyến Lấy'];
+    var list = ['Phân tích tổng quan', 'Phân tích phạt nguội', 'Phân tích tăng cường', 'Xe sắp hết hạn đăng kiểm', 'Xe đang ở xưởng'];
     var wrap = document.createElement('div'); wrap.className = 'ga-chips';
-    chips.forEach(function (c) {
-      var b = document.createElement('span'); b.className = 'ga-chip'; b.textContent = c;
-      b.addEventListener('click', function () { els.input.value = c; onSend(); });
-      wrap.appendChild(b);
-    });
+    wrap.innerHTML = list.map(function (c) { return '<span class="ga-chip">' + esc(c) + '</span>'; }).join('');
     els.body.appendChild(wrap); scrollDown();
   }
 
