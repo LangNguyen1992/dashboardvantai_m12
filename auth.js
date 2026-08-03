@@ -19,11 +19,12 @@
   var LS_EMAIL = 'ghn_dash_last_email';
   var LS_LOG = 'ghn_dash_login_log';
 
-  // Log tập trung qua Google Form (điền action + entry IDs để bật)
+  // Log tập trung qua Google Form "GHN Dashboard - Login Log"
+  // Xem lịch sử: mở form -> tab Câu trả lời (có thể Liên kết với Trang tính)
   var LOG_FORM = {
-    action: '',      // vd: https://docs.google.com/forms/d/e/XXXX/formResponse
-    emailField: '',  // vd: entry.111111
-    timeField: ''    // vd: entry.222222
+    action: 'https://docs.google.com/forms/d/e/1FAIpQLSdQT-zB-t95QECtEBkM_mwWvkaoKHLj5yLY0OBtP_V_o8dNtA/formResponse',
+    emailField: 'entry.1571758886',
+    timeField: 'entry.82817262'
   };
 
   function userFromEmail(email) { return String(email || '').split('@')[0]; }
