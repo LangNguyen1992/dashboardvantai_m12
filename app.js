@@ -1501,7 +1501,9 @@ function syncSerialToDate(v) {
 
 // Tải 1 sheet qua gviz CSV của Google (hỗ trợ CORS trực tiếp, không cần proxy)
 async function fetchSheetAsWorksheet(id, name) {
-  const url = 'https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(name);
+  // headers=1: buộc Google chỉ coi DÒNG 1 là tiêu đề. Nếu không có tham số này, gviz tự
+  // suy luận và gộp nhiều dòng đầu vào header khi mọi cột đều là chữ (làm mất dữ liệu).
+  const url = 'https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent(name);
   const res = await fetch(url);
   if (!res.ok) throw new Error(name + ': HTTP ' + res.status);
   const text = await res.text();
