@@ -1296,7 +1296,7 @@ function loadCachedFullData() {
 
 // Trích xuất ID Google Sheet từ URL (mặc định hoặc do người dùng đặt)
 function getSheetId(userUrl) {
-  const defaultId = '1n__ebFqgiGQSIEh0xncDCvxYcInsbVQQc0TbSQndz70';
+  const defaultId = '12Pe7N5dByhBw2XF4pZOkEgYb7_F14NgQlryhdhUlGf8';
   const url = userUrl || localStorage.getItem('custom_sheet_url') || '';
   const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   return (match && match[1]) ? match[1] : defaultId;
@@ -1385,7 +1385,7 @@ async function syncGoogleSheetRealtime(silent = false) {
 }
 
 function changeSheetLink() {
-  const defaultUrl = 'https://docs.google.com/spreadsheets/d/1n__ebFqgiGQSIEh0xncDCvxYcInsbVQQc0TbSQndz70/edit?gid=772669565';
+  const defaultUrl = 'https://docs.google.com/spreadsheets/d/12Pe7N5dByhBw2XF4pZOkEgYb7_F14NgQlryhdhUlGf8/edit?gid=898711822';
   const currentUrl = localStorage.getItem('custom_sheet_url') || defaultUrl;
   window.open(currentUrl, '_blank');
 
