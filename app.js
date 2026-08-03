@@ -710,12 +710,19 @@ function renderEfficiency() {
   const opVehicles = e.filter(x => x.opStatus === 'Đang vận hành');
   const avgEff = opVehicles.length ? (opVehicles.reduce((s,x)=>s+x.efficiency,0)/opVehicles.length).toFixed(1) : 0;
 
+  // Cột mới từ sheet cập nhật: tổng KM và thời gian chạy
+  const kmList = e.map(x => x.totalKm).filter(v => typeof v === 'number');
+  const totalKm = kmList.reduce((s, v) => s + v, 0);
+  const avgKm = kmList.length ? totalKm / kmList.length : 0;
+
   document.getElementById('efficiencyKPIs').innerHTML = makeKPI([
     {l:'Tổng xe', v:e.length, c:'blue', i:'🚛'},
     {l:'Đang vận hành', v:operating, c:'green', i:'✅'},
     {l:'Đề xuất thanh lý', v:opStats['Đề xuất thanh lý']||0, c:'orange', i:'📋'},
     {l:'BTBD/Tai nạn', v:(opStats['BTBD nặng']||0)+(opStats['Xe bị tai nạn']||0)+(opStats['Xe tai nạn']||0), c:'red', i:'🔧'},
-    {l:'Hiệu suất TB', v:avgEff+'%', c:'purple', i:'📊'}
+    {l:'Hiệu suất TB', v:avgEff+'%', c:'purple', i:'📊'},
+    {l:'Tổng KM đã chạy', v:fmt(totalKm)+' km', c:'cyan', i:'🛣️'},
+    {l:'KM bình quân/xe', v:fmt(avgKm)+' km', c:'blue', i:'📏'}
   ]);
 
   populateSelect('filterEffOpStatus', Object.keys(opStats).sort());
@@ -772,6 +779,9 @@ function renderEfficiencyTable() {
       <td style="font-weight:600;color:var(--text-primary)">${escapeHTML(x.plate||'')}</td>
       <td>${escapeHTML(x.tonnage||'')}</td><td>${escapeHTML(x.model||'')}</td>
       <td>${escapeHTML(x.vehicleType||'')}</td><td>${escapeHTML(x.region||'')}</td>
+      <td>${escapeHTML(x.depot||'')}</td>
+      <td>${escapeHTML(x.runTime||'')}</td>
+      <td style="font-weight:600">${x.totalKm != null ? fmt(x.totalKm) : ''}</td>
       <td><div style="display:flex;align-items:center;gap:8px"><span style="min-width:40px">${pct}%</span><div class="capacity-bar" style="width:80px"><div class="fill ${barCls}" style="width:${pct}%"></div></div></div></td>
       <td><span class="status ${escapeHTML(opCls)}">${escapeHTML(x.opStatus||'')}</span></td>
     </tr>`;
@@ -1013,89 +1023,199 @@ function renderReinforcementTable() {
     </tr>`;
   }).join('');
 }
+// ==================== PAGE: ONTIME XE TẢI (dữ liệu theo chuyến) ====================
+// Dữ liệu nguồn: DATA.ontime.trips = [{date, trip, schedule, route, tonnage, driver,
+// plate, partner, onCheckin, stops, rate}]. Tổng hợp theo Ngày / Tuần / Quý / Năm.
+window._ontimePeriod = window._ontimePeriod || 'day';
 
-// ==================== PAGE: ONTIME XE TẢI ====================
+function setOntimePeriod(p) {
+  window._ontimePeriod = p;
+  renderOntime();
+  renderOntimeCharts();
+}
+
 function otPct(v) { return (typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '-'; }
 
+function otISOWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return { year: t.getUTCFullYear(), week: Math.ceil(((t - y0) / 86400000 + 1) / 7) };
+}
+
+// Gộp chuyến theo kỳ -> [{key, label, sortKey, trips, stops, on, late, rate}]
+function ontimeByPeriod(period) {
+  const trips = (DATA.ontime && DATA.ontime.trips) || [];
+  const g = {};
+  trips.forEach(x => {
+    if (!x.date) return;
+    const parts = x.date.split('-');
+    const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    if (isNaN(d)) return;
+    let key, label, sortKey;
+    if (period === 'day') {
+      key = x.date; sortKey = d.getTime();
+      label = parts[2] + '/' + parts[1] + '/' + parts[0];
+    } else if (period === 'week') {
+      const iw = otISOWeek(d);
+      key = iw.year + '-W' + ('0' + iw.week).slice(-2);
+      const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() || 7) + 1);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      sortKey = mon.getTime();
+      label = 'W' + ('0' + iw.week).slice(-2) + ' (' + ('0' + mon.getDate()).slice(-2) + '/' + ('0' + (mon.getMonth() + 1)).slice(-2) +
+        '–' + ('0' + sun.getDate()).slice(-2) + '/' + ('0' + (sun.getMonth() + 1)).slice(-2) + ')';
+    } else if (period === 'quarter') {
+      const q = Math.floor(d.getMonth() / 3) + 1;
+      key = d.getFullYear() + '-Q' + q; sortKey = new Date(d.getFullYear(), (q - 1) * 3, 1).getTime();
+      label = 'Q' + q + '/' + d.getFullYear();
+    } else {
+      key = String(d.getFullYear()); sortKey = new Date(d.getFullYear(), 0, 1).getTime();
+      label = 'Năm ' + d.getFullYear();
+    }
+    const o = g[key] || (g[key] = { key, label, sortKey, trips: 0, stops: 0, on: 0 });
+    o.trips++; o.stops += (x.stops || 0); o.on += (x.onCheckin || 0);
+  });
+  const list = Object.keys(g).map(k => g[k]).sort((a, b) => a.sortKey - b.sortKey);
+  list.forEach(o => { o.late = o.stops - o.on; o.rate = o.stops ? o.on / o.stops : null; });
+  return list;
+}
+
 function renderOntime() {
-  const o = DATA.ontime || { groups: [], weeks: [], weekly: {}, periods: [] };
   const el = document.getElementById('ontimeKPIs');
   if (!el) return;
-  const weeks = o.weeks || [];
-  const last = weeks.length - 1;
-  const totalW = (o.weekly && o.weekly['TOTAL']) || [];
-  const otVal = last >= 0 ? totalW[last] : null;
-  const prevVal = last >= 1 ? totalW[last - 1] : null;
+  const trips = (DATA.ontime && DATA.ontime.trips) || [];
+  const period = window._ontimePeriod || 'day';
+
+  // nút kỳ đang chọn
+  document.querySelectorAll('.ot-period-btn').forEach(b => {
+    const on = b.dataset.period === period;
+    b.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;font-weight:' +
+      (on ? '700;background:var(--accent);color:#fff' : '400;background:var(--bg-card);color:var(--text-secondary)');
+  });
+
+  if (!trips.length) {
+    el.innerHTML = makeKPI([{ l: 'Ontime', v: 'Chưa có dữ liệu', c: 'blue', i: '⏱️' }]);
+    const b = document.getElementById('ontimeTableBody');
+    if (b) b.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu — hãy bấm "Đồng bộ trực tuyến"</td></tr>';
+    return;
+  }
+
+  const totStops = trips.reduce((s, x) => s + (x.stops || 0), 0);
+  const totOn = trips.reduce((s, x) => s + (x.onCheckin || 0), 0);
+  const overall = totStops ? totOn / totStops : null;
+  const list = ontimeByPeriod(period);
+  const cur = list[list.length - 1] || null;
+  const prev = list.length > 1 ? list[list.length - 2] : null;
+  const diff = (cur && prev && cur.rate != null && prev.rate != null) ? (cur.rate - prev.rate) * 100 : null;
+  const dates = trips.map(x => x.date).filter(Boolean).sort();
 
   const kpis = [
-    { l: 'Ontime tổng (' + (weeks[last] || 'mới nhất') + ')', v: otPct(otVal), c: (otVal != null && otVal >= 0.95) ? 'green' : (otVal != null && otVal >= 0.9) ? 'orange' : 'red', i: '⏱️' }
+    { l: 'Ontime toàn kỳ', v: otPct(overall), c: overall >= 0.95 ? 'green' : overall >= 0.9 ? 'orange' : 'red', i: '⏱️' },
+    { l: 'Tổng chuyến', v: fmt(trips.length), c: 'blue', i: '🚚' },
+    { l: 'Điểm dừng / Đúng giờ', v: fmt(totStops) + ' / ' + fmt(totOn), c: 'cyan', i: '📍' },
+    { l: 'Số điểm TRỄ', v: fmt(totStops - totOn), c: 'red', i: '⚠️' },
   ];
-  if (otVal != null && prevVal != null) {
-    const diff = (otVal - prevVal) * 100;
-    kpis.push({ l: 'So với ' + (weeks[last - 1] || 'tuần trước'), v: (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' điểm', c: diff >= 0 ? 'green' : 'red', i: diff >= 0 ? '📈' : '📉' });
-  }
-  (o.groups || []).forEach(g => {
-    const arr = o.weekly[g] || [];
-    const v = last >= 0 ? arr[last] : null;
-    kpis.push({ l: g, v: otPct(v), c: (v != null && v >= 0.95) ? 'green' : (v != null && v >= 0.9) ? 'cyan' : 'red', i: '📍' });
-  });
+  if (cur) kpis.push({ l: 'Kỳ mới nhất: ' + cur.label, v: otPct(cur.rate), c: cur.rate >= 0.95 ? 'green' : cur.rate >= 0.9 ? 'orange' : 'red', i: '📅' });
+  if (diff != null) kpis.push({ l: 'So kỳ trước (' + prev.label + ')', v: (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' điểm %', c: diff >= 0 ? 'green' : 'red', i: diff >= 0 ? '📈' : '📉' });
   el.innerHTML = makeKPI(kpis);
 
-  const head = document.getElementById('ontimeTableHead');
+  const lb = document.getElementById('ontimePeriodLabel');
+  if (lb) lb.textContent = '— dữ liệu ' + (dates[0] || '') + ' đến ' + (dates[dates.length - 1] || '') + ', ' + list.length + ' kỳ';
+
+  // bảng: kỳ mới nhất lên đầu
   const body = document.getElementById('ontimeTableBody');
-  if (head && body) {
-    head.innerHTML = '<tr><th>Nhóm tuyến</th>' + weeks.map(w => '<th>' + escapeHTML(w) + '</th>').join('') + '</tr>';
-    const names = (o.groups || []).concat(o.weekly && o.weekly['TOTAL'] ? ['TOTAL'] : []);
-    body.innerHTML = names.map(n => {
-      const arr = (o.weekly && o.weekly[n]) || [];
-      return '<tr><td style="font-weight:600;color:var(--text-primary)">' + escapeHTML(n) + '</td>' +
-        weeks.map((w, i) => {
-          const v = arr[i];
-          const cls = (v == null) ? '' : v >= 0.95 ? 'assigned' : v >= 0.9 ? 'unassigned' : 'breakdown';
-          return '<td>' + (v == null ? '-' : '<span class="status ' + cls + '">' + (v * 100).toFixed(1) + '%</span>') + '</td>';
-        }).join('') + '</tr>';
+  if (body) {
+    const rev = list.slice().reverse();
+    body.innerHTML = rev.map((o, idx) => {
+      const p = rev[idx + 1]; // kỳ liền trước (do đã đảo thứ tự)
+      const d = (p && o.rate != null && p.rate != null) ? (o.rate - p.rate) * 100 : null;
+      const cls = o.rate == null ? '' : o.rate >= 0.95 ? 'assigned' : o.rate >= 0.9 ? 'unassigned' : 'breakdown';
+      const dTxt = d == null ? '—' : '<span style="color:' + (d >= 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:700">' + (d >= 0 ? '+' : '') + d.toFixed(1) + ' đ%</span>';
+      return '<tr><td style="font-weight:600;color:var(--text-primary)">' + escapeHTML(o.label) + '</td>' +
+        '<td>' + fmt(o.trips) + '</td><td>' + fmt(o.stops) + '</td><td>' + fmt(o.on) + '</td>' +
+        '<td style="color:' + (o.late > 0 ? 'var(--danger)' : 'var(--text-muted)') + ';font-weight:600">' + fmt(o.late) + '</td>' +
+        '<td><span class="status ' + cls + '">' + otPct(o.rate) + '</span></td>' +
+        '<td>' + dTxt + '</td></tr>';
     }).join('');
   }
 }
 
 function renderOntimeCharts() {
   destroyChartIfExists('chartOntimeTrend');
+  destroyChartIfExists('chartOntimeCompare');
+  destroyChartIfExists('chartOntimePartner');
+  destroyChartIfExists('chartOntimeWorst');
   destroyChartIfExists('chartOntimeGroup');
-  const o = DATA.ontime || { groups: [], weeks: [], weekly: {} };
-  const weeks = o.weeks || [];
+  const trips = (DATA.ontime && DATA.ontime.trips) || [];
+  if (!trips.length) return;
+  const period = window._ontimePeriod || 'day';
+  const list = ontimeByPeriod(period);
+  const show = list.slice(period === 'day' ? -30 : period === 'week' ? -16 : -12);
+  const labels = show.map(o => o.label);
 
+  // 1) Xu hướng % ontime theo kỳ + đường mục tiêu 95%
   const trendEl = document.getElementById('chartOntimeTrend');
-  if (trendEl && weeks.length) {
-    const series = (o.groups || []).concat(o.weekly && o.weekly['TOTAL'] ? ['TOTAL'] : []);
-    new Chart(trendEl, {
-      type: 'line',
-      data: {
-        labels: weeks,
-        datasets: series.map((g, i) => ({
-          label: g,
-          data: ((o.weekly && o.weekly[g]) || []).map(v => v == null ? null : Math.round(v * 1000) / 10),
-          borderColor: CHART_COLORS[i % CHART_COLORS.length],
-          backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
-          tension: 0.3, fill: false, borderWidth: g === 'TOTAL' ? 3 : 2, pointRadius: 3
-        }))
-      },
-      options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { y: { ticks: { callback: v => v + '%' } } } }
-    });
-  }
+  if (trendEl) new Chart(trendEl, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '% Ontime', data: show.map(o => o.rate == null ? null : Math.round(o.rate * 1000) / 10), borderColor: '#17a398', backgroundColor: 'rgba(23,163,152,.18)', tension: .3, fill: true, borderWidth: 3, pointRadius: 3 },
+        { label: 'Mục tiêu 95%', data: show.map(() => 95), borderColor: '#dc2626', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { y: { ticks: { callback: v => v + '%' } } } }
+  });
 
-  const grpEl = document.getElementById('chartOntimeGroup');
-  if (grpEl && weeks.length) {
-    const last = weeks.length - 1;
-    const groups = o.groups || [];
-    new Chart(grpEl, {
-      type: 'bar',
-      data: {
-        labels: groups,
-        datasets: [{ label: '%OT (' + (weeks[last] || '') + ')', data: groups.map(g => { const v = ((o.weekly && o.weekly[g]) || [])[last]; return v == null ? 0 : Math.round(v * 1000) / 10; }), backgroundColor: CHART_COLORS.slice(0, groups.length), borderRadius: 6 }]
-      },
-      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, ticks: { callback: v => v + '%' } } } }
-    });
+  // 2) So sánh khối lượng: đúng giờ vs trễ (cột chồng)
+  const cmpEl = document.getElementById('chartOntimeCompare');
+  if (cmpEl) new Chart(cmpEl, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Đúng giờ', data: show.map(o => o.on), backgroundColor: '#16a34a', stack: 'ot', borderWidth: 0 },
+        { label: 'Trễ', data: show.map(o => o.late), backgroundColor: '#dc2626', stack: 'ot', borderWidth: 0 }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { stacked: true }, y: { stacked: true } } }
+  });
+
+  // Chỉ lấy chuyến thuộc kỳ mới nhất cho 2 biểu đồ dưới
+  const curKey = list.length ? list[list.length - 1].key : null;
+  function keyOf(x) {
+    if (!x.date) return null;
+    const p = x.date.split('-'); const d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (period === 'day') return x.date;
+    if (period === 'week') { const iw = otISOWeek(d); return iw.year + '-W' + ('0' + iw.week).slice(-2); }
+    if (period === 'quarter') return d.getFullYear() + '-Q' + (Math.floor(d.getMonth() / 3) + 1);
+    return String(d.getFullYear());
   }
+  const curTrips = trips.filter(x => keyOf(x) === curKey);
+
+  // 3) Ontime theo Đối tác
+  const byP = {};
+  curTrips.forEach(x => { const k = x.partner || '(Chưa gán)'; const o = byP[k] || (byP[k] = { on: 0, st: 0 }); o.on += x.onCheckin || 0; o.st += x.stops || 0; });
+  const pRows = Object.keys(byP).map(k => ({ k, r: byP[k].st ? byP[k].on / byP[k].st * 100 : 0, st: byP[k].st }))
+    .filter(x => x.st >= 5).sort((a, b) => b.st - a.st).slice(0, 10);
+  const pEl = document.getElementById('chartOntimePartner');
+  if (pEl && pRows.length) new Chart(pEl, {
+    type: 'bar',
+    data: { labels: pRows.map(x => x.k), datasets: [{ label: '% Ontime', data: pRows.map(x => Math.round(x.r * 10) / 10), backgroundColor: pRows.map(x => x.r >= 95 ? '#16a34a' : x.r >= 90 ? '#d97706' : '#dc2626'), borderRadius: 6 }] },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => v + '%' } } } }
+  });
+
+  // 4) Top tuyến/lịch tải trễ nhiều nhất
+  const byS = {};
+  curTrips.forEach(x => { const k = x.schedule || '(Không rõ)'; const o = byS[k] || (byS[k] = { late: 0 }); o.late += (x.stops || 0) - (x.onCheckin || 0); });
+  const sRows = Object.keys(byS).map(k => ({ k, late: byS[k].late })).filter(x => x.late > 0).sort((a, b) => b.late - a.late).slice(0, 10);
+  const wEl = document.getElementById('chartOntimeWorst');
+  if (wEl && sRows.length) new Chart(wEl, {
+    type: 'bar',
+    data: { labels: sRows.map(x => x.k), datasets: [{ label: 'Số điểm trễ', data: sRows.map(x => x.late), backgroundColor: '#dc2626', borderRadius: 6 }] },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+  });
 }
 
 // ==================== PAGE: BTBD (BẢO TRÌ - SỬA CHỮA) ====================
@@ -1152,9 +1272,74 @@ function renderBTBDTable() {
   }).join('');
 }
 
+// ---- BTBD theo kỳ (Ngày/Tuần/Quý/Năm) ----
+window._btbdPeriod = window._btbdPeriod || 'week';
+function setBtbdPeriod(p) { window._btbdPeriod = p; renderBTBDPeriodChart(); }
+
+function btbdParseDate(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+
+function renderBTBDPeriodChart() {
+  destroyChartIfExists('chartBTBDPeriod');
+  const period = window._btbdPeriod || 'week';
+  document.querySelectorAll('.bt-period-btn').forEach(b => {
+    const on = b.dataset.period === period;
+    b.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;font-weight:' +
+      (on ? '700;background:var(--accent);color:#fff' : '400;background:var(--bg-card);color:var(--text-secondary)');
+  });
+  const el = document.getElementById('chartBTBDPeriod');
+  if (!el) return;
+  const g = {};
+  (DATA.btbd || []).forEach(x => {
+    const d = btbdParseDate(x.inDate); if (!d) return;
+    let key, label, sortKey;
+    if (period === 'day') {
+      key = d.toISOString().slice(0, 10); sortKey = d.getTime();
+      label = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
+    } else if (period === 'week') {
+      const iw = otISOWeek(d); key = iw.year + '-W' + ('0' + iw.week).slice(-2);
+      const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() || 7) + 1);
+      sortKey = mon.getTime(); label = 'W' + ('0' + iw.week).slice(-2) + '/' + iw.year;
+    } else if (period === 'quarter') {
+      const q = Math.floor(d.getMonth() / 3) + 1; key = d.getFullYear() + '-Q' + q;
+      sortKey = new Date(d.getFullYear(), (q - 1) * 3, 1).getTime(); label = 'Q' + q + '/' + d.getFullYear();
+    } else {
+      key = String(d.getFullYear()); sortKey = new Date(d.getFullYear(), 0, 1).getTime(); label = 'Năm ' + d.getFullYear();
+    }
+    const o = g[key] || (g[key] = { label, sortKey, n: 0, cost: 0 });
+    o.n++; o.cost += parseCost(x.cost);
+  });
+  const list = Object.keys(g).map(k => g[k]).sort((a, b) => a.sortKey - b.sortKey)
+    .slice(period === 'day' ? -30 : period === 'week' ? -16 : -12);
+  if (!list.length) return;
+  new Chart(el, {
+    data: {
+      labels: list.map(o => o.label),
+      datasets: [
+        { type: 'bar', label: 'Chi phí (triệu đ)', data: list.map(o => Math.round(o.cost / 1000000 * 10) / 10), backgroundColor: '#8b5cf6', borderWidth: 0, yAxisID: 'y' },
+        { type: 'line', label: 'Số lượt vào xưởng', data: list.map(o => o.n), borderColor: '#2fd4c4', backgroundColor: '#2fd4c4', borderWidth: 3, tension: .3, pointRadius: 3, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: 'Chi phí (triệu đ)' } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Số lượt' } }
+      }
+    }
+  });
+}
+
 function renderBTBDCharts() {
   destroyChartIfExists('chartBTBDContent');
   destroyChartIfExists('chartBTBDTop');
+  renderBTBDPeriodChart();
   const d = DATA.btbd || [];
 
   const cStats = {};
@@ -1490,9 +1675,9 @@ function processAndApplyWorkbook(workbook) {
   const efficiency = [];
   for (let i = 1; i < eRows.length; i++) {
     const row = eRows[i] || [];
-    const plate = cellS(row, eMap, 'Biển số');
+    const plate = cellS(row, eMap, ['Biển số', 'BIỂN SỐ XE', 'BKS']);
     if (!plate) continue;
-    const effVal = cellRaw(row, eMap, ['Hiệu suất sử dụng xe', 'Hiệu suất']);
+    const effVal = cellRaw(row, eMap, ['HIỆU SUẤT SỬ DỤNG', 'Hiệu suất sử dụng xe', 'Hiệu suất']);
     let numEff = 0;
     if (typeof effVal === 'number') {
       // <=1: giá trị dạng phân số (0.28) -> nhân 100; >1: đã là % sẵn (28.01) -> giữ nguyên
@@ -1512,14 +1697,23 @@ function processAndApplyWorkbook(workbook) {
       plate: plate,
       tonnage: cellS(row, eMap, 'Tải trọng'),
       model: cellS(row, eMap, 'Model'),
-      region: cellS(row, eMap, 'Khu vực'),
+      region: cellS(row, eMap, ['KHU VỰC', 'Khu vực']),
       department: cellS(row, eMap, ['Bộ phận quản lý', 'Bộ phận']),
       yearsUsed: cellS(row, eMap, 'Số năm đã dùng'),
       condition: cellS(row, eMap, 'Tình trạng xe'),
       status: cellS(row, eMap, 'Tình trạng'),
-      vehicleType: cellS(row, eMap, 'Loại xe'),
+      vehicleType: cellS(row, eMap, ['LOẠI XE', 'Loại xe']),
       efficiency: numEff,
-      opStatus: cellS(row, eMap, 'Tình trạng vận hành'),
+      opStatus: cellS(row, eMap, ['Tình trạng vận hành', 'TÌNH TRẠNG VẬN HÀNH']),
+      // ---- cột mới trong sheet cập nhật ----
+      runTime: cellS(row, eMap, ['TỔNG THỜI GIAN CHẠY', 'Tổng thời gian chạy']),
+      totalKm: (function () {
+        var v = cellRaw(row, eMap, ['TỔNG SỐ KM', 'Tổng số km']);
+        if (typeof v === 'number') return v;
+        var n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+        return isNaN(n) ? null : n;
+      })(),
+      depot: cellS(row, eMap, ['Kho quản lý', 'KHO QUẢN LÝ']),
     });
   }
 
@@ -1583,35 +1777,37 @@ function processAndApplyWorkbook(workbook) {
   }
 
   // 7. ONTIME (Ontime xe tải) - lấy bảng "Ontime theo Tuần"
-  const ontime = { groups: [], weeks: [], weekly: {} };
+  // Cấu trúc MỚI: mỗi dòng = 1 chuyến, có Time / Mã chuyến / Lịch tải / Lộ trình /
+  // Tải trọng / Tài xế / BKS / Đối tác / SL Ontime Checkin / SL Điểm dừng.
+  // ontime.trips = danh sách chuyến; giữ ontime.weekly/groups/weeks = [] cho tương thích cũ.
+  const ontime = { groups: [], weeks: [], weekly: {}, trips: [] };
   const oSheet = workbook.Sheets['Ontime xe tải'];
   if (oSheet) {
     const oRows = XLSX.utils.sheet_to_json(oSheet, { header: 1, raw: true, defval: null });
-    // Tìm dòng tiêu đề 'Tuyến' của bảng theo tuần (nhãn cột có chứa 'W' như W18...);
-    // nếu không thấy thì lấy dòng 'Tuyến' đầu tiên làm phương án dự phòng.
-    let headerIdx = -1;
-    for (let i = 0; i < oRows.length; i++) {
-      const r = oRows[i]; if (!r) continue;
-      if (String(r[0] == null ? '' : r[0]).trim() === 'Tuyến') {
-        const labels = r.slice(1).filter(x => x !== null && String(x).trim() !== '');
-        if (labels.some(x => /w/i.test(String(x)))) { headerIdx = i; break; }
-        if (headerIdx < 0) headerIdx = i;
-      }
-    }
-    if (headerIdx >= 0) {
-      const headerRow = oRows[headerIdx] || [];
-      const cols = [];
-      for (let c = 1; c < headerRow.length; c++) {
-        if (headerRow[c] !== null && String(headerRow[c]).trim() !== '') cols.push(c);
-      }
-      ontime.weeks = cols.map(c => String(headerRow[c]).trim());
-      for (let i = headerIdx + 1; i < oRows.length; i++) {
-        const r = oRows[i]; if (!r) continue;
-        const name = String(r[0] == null ? '' : r[0]).trim();
-        if (!name) continue;
-        if (name === 'Tuyến' || /ontime theo/i.test(name)) break;
-        ontime.weekly[name] = cols.map(c => (typeof r[c] === 'number' ? r[c] : null));
-        if (name !== 'TOTAL') ontime.groups.push(name);
+    const oMap = buildColMap(oRows);
+    const hasTrip = ('time' in oMap) || ('mã chuyến' in oMap);
+    if (hasTrip) {
+      for (let i = 1; i < oRows.length; i++) {
+        const row = oRows[i] || [];
+        const trip = cellS(row, oMap, ['Mã chuyến', 'Ma chuyen']);
+        if (!trip) continue;
+        const dRaw = cellS(row, oMap, ['Time', 'Ngày', 'Thời gian']);
+        const onN = Number(cellRaw(row, oMap, ['SL Ontime Checkin', 'SL Ontime'])) || 0;
+        const stN = Number(cellRaw(row, oMap, ['SL Điểm dừng', 'SL Diem dung'])) || 0;
+        ontime.trips.push({
+          dateStr: dRaw,                                   // "2026-07-27 - Thứ 2"
+          date: (String(dRaw || '').match(/\d{4}-\d{2}-\d{2}/) || [null])[0],
+          trip: trip,
+          schedule: cellS(row, oMap, ['Lịch tải']),
+          route: cellS(row, oMap, ['Lộ trình']),
+          tonnage: cellS(row, oMap, ['Tải trọng']),
+          driver: cellS(row, oMap, ['Tài xế']),
+          plate: cellS(row, oMap, ['BKS']),
+          partner: cellS(row, oMap, ['Đối tác', 'NCC']),
+          onCheckin: onN,
+          stops: stN,
+          rate: stN ? onN / stN : null,
+        });
       }
     }
   }

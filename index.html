@@ -501,6 +501,9 @@
                   <th>Model</th>
                   <th>Loại xe</th>
                   <th>Khu vực</th>
+                  <th>Kho quản lý</th>
+                  <th>Tổng thời gian chạy</th>
+                  <th>Tổng số KM</th>
                   <th>Hiệu suất</th>
                   <th>Tình trạng VH</th>
                 </tr>
@@ -514,25 +517,61 @@
       <!-- ============ PAGE: ONTIME XE TẢI ============ -->
       <div class="page" id="page-ontime">
         <div class="kpi-grid" id="ontimeKPIs"></div>
+
+        <!-- CHỌN KỲ: NGÀY / TUẦN / QUÝ / NĂM -->
+        <div class="table-card" style="padding:14px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">📅 Tổng hợp Ontime theo kỳ</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="ot-period-btn" data-period="day" onclick="setOntimePeriod('day')">Theo ngày</button>
+              <button class="ot-period-btn" data-period="week" onclick="setOntimePeriod('week')">Theo tuần</button>
+              <button class="ot-period-btn" data-period="quarter" onclick="setOntimePeriod('quarter')">Theo quý</button>
+              <button class="ot-period-btn" data-period="year" onclick="setOntimePeriod('year')">Theo năm</button>
+            </div>
+          </div>
+        </div>
+
         <div class="chart-grid">
           <div class="chart-card">
-            <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Xu hướng Ontime theo tuần</div>
+            <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Xu hướng tỷ lệ Ontime theo kỳ</div>
             <canvas id="chartOntimeTrend"></canvas>
           </div>
           <div class="chart-card">
-            <div class="chart-title"><span class="dot" style="background:var(--purple)"></span> Ontime theo nhóm tuyến (mới nhất)</div>
-            <canvas id="chartOntimeGroup"></canvas>
+            <div class="chart-title"><span class="dot" style="background:var(--purple)"></span> So sánh khối lượng: Đúng giờ vs Trễ</div>
+            <canvas id="chartOntimeCompare"></canvas>
           </div>
         </div>
+
         <div class="table-card">
           <div class="table-header">
-            <h3>⏱️ Tỷ lệ đúng giờ theo tuần</h3>
+            <h3>⏱️ Chi tiết theo kỳ <span id="ontimePeriodLabel" style="font-weight:400;color:var(--text-muted);font-size:12px"></span></h3>
           </div>
-          <div style="overflow-x:auto">
+          <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
             <table>
-              <thead id="ontimeTableHead"></thead>
+              <thead>
+                <tr>
+                  <th>Kỳ</th>
+                  <th>Số chuyến</th>
+                  <th>Điểm dừng</th>
+                  <th>Đúng giờ</th>
+                  <th>Trễ</th>
+                  <th>% Ontime</th>
+                  <th>Δ so kỳ trước</th>
+                </tr>
+              </thead>
               <tbody id="ontimeTableBody"></tbody>
             </table>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--cyan)"></span> Ontime theo Đối tác (kỳ đang chọn)</div>
+            <canvas id="chartOntimePartner"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--warning)"></span> Top tuyến trễ nhiều nhất</div>
+            <canvas id="chartOntimeWorst"></canvas>
           </div>
         </div>
       </div>
@@ -540,6 +579,26 @@
       <!-- ============ PAGE: BTBD (BẢO TRÌ - SỬA CHỮA) ============ -->
       <div class="page" id="page-btbd">
         <div class="kpi-grid" id="btbdKPIs"></div>
+
+        <!-- BTBD THEO KỲ: NGÀY / TUẦN / QUÝ / NĂM -->
+        <div class="table-card" style="padding:14px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">📅 Lượt vào xưởng &amp; chi phí theo kỳ</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="bt-period-btn" data-period="day" onclick="setBtbdPeriod('day')">Theo ngày</button>
+              <button class="bt-period-btn" data-period="week" onclick="setBtbdPeriod('week')">Theo tuần</button>
+              <button class="bt-period-btn" data-period="quarter" onclick="setBtbdPeriod('quarter')">Theo quý</button>
+              <button class="bt-period-btn" data-period="year" onclick="setBtbdPeriod('year')">Theo năm</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card" style="grid-column:1/-1">
+            <div class="chart-title"><span class="dot" style="background:var(--purple)"></span> So sánh chi phí &amp; số lượt BTBD theo kỳ</div>
+            <canvas id="chartBTBDPeriod"></canvas>
+          </div>
+        </div>
+
         <div class="chart-grid">
           <div class="chart-card">
             <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Phân bổ theo nội dung</div>
