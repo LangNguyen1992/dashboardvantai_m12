@@ -108,6 +108,11 @@
       return { answer: helpText(), matched: true };
     }
 
+    // 0.4) Lịch sử đăng nhập dashboard
+    if (has(q, ['ai da dang nhap', 'lich su dang nhap', 'dang nhap gan day', 'login log', 'ai dang nhap'])) {
+      return { answer: answerLoginLog(), matched: true };
+    }
+
     // 0.5) CHẾ ĐỘ PHÂN TÍCH: tổng hợp / phân tích / so sánh / nhận xét / khuyến nghị
     var anaTopic = topicOf(q);
     var strongAna = has(q, ['phan tich', 'tong hop', 'bao cao', 'tong quan', 'tinh hinh', 'danh gia', 'xu huong', 'khuyen nghi', 'de xuat', 'insight', 'nhan xet']);
@@ -486,6 +491,20 @@
     });
     var wk = weeks[lastIdx] || 'mới nhất';
     return '<b>Ontime theo nhóm tuyến — tuần ' + esc(wk) + '</b>' + table(['Nhóm tuyến', 'Tỷ lệ đúng giờ'], rows);
+  }
+
+  // Lịch sử đăng nhập (log cục bộ trên máy này)
+  function answerLoginLog() {
+    var log = [];
+    try { log = JSON.parse(localStorage.getItem('ghn_dash_login_log') || '[]'); } catch (e) {}
+    if (!log.length) return note('Chưa có lượt đăng nhập nào được ghi trên máy này.');
+    var rows = log.slice(-20).reverse().map(function (x) {
+      var d = new Date(x.t);
+      return [x.e, isNaN(d) ? x.t : d.toLocaleString('vi-VN')];
+    });
+    return '<b>🔐 Lịch sử đăng nhập (20 lượt gần nhất trên máy này)</b>' +
+      table(['Email', 'Thời gian'], rows) +
+      note('Đây là log của riêng máy/trình duyệt này. Muốn xem tập trung tất cả mọi người, cần bật gửi log về Google Form (hỏi quản trị viên).');
   }
 
   // ================================================ MODULE PHÂN TÍCH ("AI mode")
