@@ -1891,6 +1891,7 @@ function processAndApplyWorkbook(workbook) {
   renderAssessment();
   renderCost();
   renderTrends();
+  if (typeof mountAllPeriodBlocks === 'function') mountAllPeriodBlocks();
 
   destroyAllCharts();
   navigateTo(pageName);
@@ -1943,6 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAssessment();
   renderCost();
   renderTrends();
+  if (typeof mountAllPeriodBlocks === 'function') mountAllPeriodBlocks();
 
   // Tự động lấy dữ liệu realtime khi tải trang (chế độ chạy ngầm không hiện thông báo thành công)
   setTimeout(() => {
