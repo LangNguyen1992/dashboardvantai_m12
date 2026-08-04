@@ -89,9 +89,13 @@
   // metrics: [{key,label,type:'num|money|pct|mil', calc(bucketRows), chart:true|false, color}]
   function buildSeries(cfg, period) {
     var buckets = {};
+    // Với dữ liệu LỊCH SỬ (đã xảy ra), bỏ các mốc ở tương lai — thường do ô ngày
+    // trên Google Sheet bị hiểu sai định dạng (mm/dd) hoặc nhập thiếu.
+    var today = new Date(); today.setHours(23, 59, 59, 999);
     (cfg.rows() || []).forEach(function (r) {
       var d = toDate(cfg.getDate(r));
       if (!d) return;
+      if (cfg.dropFuture && d > today) return;
       var k = keyOf(d, period);
       var b = buckets[k.key] || (buckets[k.key] = { key: k.key, label: k.label, sort: k.sort, rows: [] });
       b.rows.push(r);

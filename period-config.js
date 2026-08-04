@@ -24,7 +24,7 @@
 
     // ---------------- 1. PHẠT NGUỘI ----------------
     mountPeriodBlock({
-      id: 'pb_fines', pageId: 'page-fines', title: 'Phạt nguội theo kỳ', defaultPeriod: 'month',
+      id: 'pb_fines', dropFuture: true, pageId: 'page-fines', title: 'Phạt nguội theo kỳ', defaultPeriod: 'month',
       higherIsBetter: false,
       rows: A('fines'), getDate: function (x) { return x.violationTime || x.reportDate; },
       metrics: [
@@ -37,7 +37,7 @@
 
     // ---------------- 2. BTBD ----------------
     mountPeriodBlock({
-      id: 'pb_btbd', pageId: 'page-btbd', title: 'BTBD theo kỳ (lượt vào xưởng & chi phí)', defaultPeriod: 'month',
+      id: 'pb_btbd', dropFuture: true, pageId: 'page-btbd', title: 'BTBD theo kỳ (lượt vào xưởng & chi phí)', defaultPeriod: 'month',
       higherIsBetter: false,
       rows: A('btbd'), getDate: function (x) { return x.inDate; },
       metrics: [
@@ -49,7 +49,7 @@
 
     // ---------------- 3. TĂNG CƯỜNG LẤY ----------------
     mountPeriodBlock({
-      id: 'pb_reinf', pageId: 'page-reinforcement', title: 'Tăng cường theo kỳ (nhu cầu & đáp ứng)', defaultPeriod: 'month',
+      id: 'pb_reinf', dropFuture: true, pageId: 'page-reinforcement', title: 'Tăng cường theo kỳ (nhu cầu & đáp ứng)', defaultPeriod: 'month',
       deltaMetric: 'rate', target: 90,
       rows: A('reinforcement'),
       getDate: function (x) { return (typeof reinfDateOf === 'function') ? reinfDateOf(x) : (x.ts || x.requestDate); },
@@ -67,7 +67,7 @@
 
     // ---------------- 4. CHI PHÍ (BTBD + Phạt) ----------------
     mountPeriodBlock({
-      id: 'pb_cost', pageId: 'page-cost', title: 'Chi phí vận hành theo kỳ (tách BTBD / Phạt nguội)', defaultPeriod: 'month',
+      id: 'pb_cost', dropFuture: true, pageId: 'page-cost', title: 'Chi phí vận hành theo kỳ (tách BTBD / Phạt nguội)', defaultPeriod: 'month',
       higherIsBetter: false, stacked: true,
       rows: function () {
         var out = [];
@@ -85,7 +85,7 @@
 
     // ---------------- 5. NHÂN SỰ (tuyển mới / nghỉ việc) ----------------
     mountPeriodBlock({
-      id: 'pb_staff', pageId: 'page-staff', title: 'Biến động nhân sự theo kỳ (vào làm / nghỉ việc)', defaultPeriod: 'month',
+      id: 'pb_staff', dropFuture: true, pageId: 'page-staff', title: 'Biến động nhân sự theo kỳ (vào làm / nghỉ việc)', defaultPeriod: 'month',
       note: 'Trục thời gian lấy từ "Ngày vào làm" (tuyển mới) và "Ngày nghỉ việc" (rời đi).',
       rows: function () {
         var out = [];
@@ -130,7 +130,7 @@
 
     // ---------------- 7. ONTIME (theo chuyến) ----------------
     mountPeriodBlock({
-      id: 'pb_ontime', pageId: 'page-ontime', title: 'Ontime theo kỳ (tất cả mốc thời gian)', defaultPeriod: 'week',
+      id: 'pb_ontime', dropFuture: true, pageId: 'page-ontime', title: 'Ontime theo kỳ (tất cả mốc thời gian)', defaultPeriod: 'week',
       deltaMetric: 'rate', target: 95,
       rows: function () { return (D().ontime && D().ontime.trips) || []; },
       getDate: function (x) { return x.date; },
@@ -147,7 +147,7 @@
 
     // ---------------- 8. DASHBOARD (tổng hợp đa chỉ số) ----------------
     mountPeriodBlock({
-      id: 'pb_dash', pageId: 'page-dashboard', title: 'Tổng quan vận hành theo kỳ', defaultPeriod: 'month',
+      id: 'pb_dash', dropFuture: true, pageId: 'page-dashboard', title: 'Tổng quan vận hành theo kỳ', defaultPeriod: 'month',
       note: 'Gộp các nghiệp vụ có mốc thời gian: ticket tăng cường, lượt BTBD, vụ phạt nguội và chuyến chạy.',
       rows: function () {
         var out = [];
@@ -171,7 +171,7 @@
 
     // ---------------- 9. XU HƯỚNG (chi phí + khối lượng) ----------------
     mountPeriodBlock({
-      id: 'pb_trend', pageId: 'page-trends', title: 'Xu hướng chi phí & khối lượng theo kỳ', defaultPeriod: 'month',
+      id: 'pb_trend', dropFuture: true, pageId: 'page-trends', title: 'Xu hướng chi phí & khối lượng theo kỳ', defaultPeriod: 'month',
       higherIsBetter: false, stacked: true,
       rows: function () {
         var out = [];
@@ -189,7 +189,7 @@
 
     // ---------------- 10. ĐÁNH GIÁ & CẢI THIỆN ----------------
     mountPeriodBlock({
-      id: 'pb_assess', pageId: 'page-assessment', title: 'Diễn biến các chỉ tiêu theo kỳ', defaultPeriod: 'month',
+      id: 'pb_assess', dropFuture: true, pageId: 'page-assessment', title: 'Diễn biến các chỉ tiêu theo kỳ', defaultPeriod: 'month',
       note: 'Đối chiếu chỉ tiêu chính giữa các kỳ: % đáp ứng tăng cường, % ontime, số vụ phạt, lượt BTBD.',
       rows: function () {
         var out = [];
