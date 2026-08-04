@@ -6,7 +6,10 @@
 (function () {
   'use strict';
 
-  function A(k) { return function () { return (window.DATA && DATA[k]) || []; }; }
+  // DATA được khai báo bằng const trong data.js -> KHÔNG nằm trên window.
+  // Phải tham chiếu trực tiếp qua lexical scope.
+  function D() { try { return (typeof DATA !== 'undefined' && DATA) ? DATA : {}; } catch (e) { return {}; } }
+  function A(k) { return function () { var d = D(); return Array.isArray(d[k]) ? d[k] : []; }; }
   function money(v) { return (typeof parseCost === 'function') ? parseCost(v) : (parseFloat(String(v).replace(/[^0-9]/g, '')) || 0); }
   function noAcc(s) {
     return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'), '').replace(/đ/g, 'd');
@@ -68,8 +71,8 @@
       higherIsBetter: false, stacked: true,
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.btbd) || []).forEach(function (x) { out.push({ _t: 'btbd', d: x.inDate, c: money(x.cost) }); });
-        ((window.DATA && DATA.fines) || []).forEach(function (x) { out.push({ _t: 'fine', d: x.violationTime || x.reportDate, c: money(x.cost) }); });
+        ((D().btbd) || []).forEach(function (x) { out.push({ _t: 'btbd', d: x.inDate, c: money(x.cost) }); });
+        ((D().fines) || []).forEach(function (x) { out.push({ _t: 'fine', d: x.violationTime || x.reportDate, c: money(x.cost) }); });
         return out;
       },
       getDate: function (x) { return x.d; },
@@ -86,7 +89,7 @@
       note: 'Trục thời gian lấy từ "Ngày vào làm" (tuyển mới) và "Ngày nghỉ việc" (rời đi).',
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.drivers) || []).forEach(function (x) {
+        ((D().drivers) || []).forEach(function (x) {
           if (x.startDate) out.push({ _t: 'in', d: x.startDate });
           if (x.endDate) out.push({ _t: 'out', d: x.endDate });
         });
@@ -107,7 +110,7 @@
       note: 'Đếm số mục giấy tờ (đăng kiểm, phù hiệu, phí đường bộ, BH dân sự) đáo hạn trong kỳ — dùng để lên kế hoạch gia hạn.',
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.vehicles) || []).forEach(function (x) {
+        ((D().vehicles) || []).forEach(function (x) {
           if (x.inspectionExpiry) out.push({ _t: 'dk', d: x.inspectionExpiry, p: x.plate });
           if (x.badgeExpiry) out.push({ _t: 'ph', d: x.badgeExpiry, p: x.plate });
           if (x.roadFeeExpiry) out.push({ _t: 'db', d: x.roadFeeExpiry, p: x.plate });
@@ -129,7 +132,7 @@
     mountPeriodBlock({
       id: 'pb_ontime', pageId: 'page-ontime', title: 'Ontime theo kỳ (tất cả mốc thời gian)', defaultPeriod: 'week',
       deltaMetric: 'rate', target: 95,
-      rows: function () { return (window.DATA && DATA.ontime && DATA.ontime.trips) || []; },
+      rows: function () { return (D().ontime && D().ontime.trips) || []; },
       getDate: function (x) { return x.date; },
       metrics: [
         { key: 'rate', label: '% Ontime', type: 'pct', calc: function (r) {
@@ -148,13 +151,13 @@
       note: 'Gộp các nghiệp vụ có mốc thời gian: ticket tăng cường, lượt BTBD, vụ phạt nguội và chuyến chạy.',
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.reinforcement) || []).forEach(function (x) {
+        ((D().reinforcement) || []).forEach(function (x) {
           var d = (typeof reinfDateOf === 'function') ? reinfDateOf(x) : (x.ts || x.requestDate);
           if (d) out.push({ _t: 'tc', d: d });
         });
-        ((window.DATA && DATA.btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate, c: money(x.cost) }); });
-        ((window.DATA && DATA.fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d, c: money(x.cost) }); });
-        ((window.DATA && DATA.ontime && DATA.ontime.trips) || []).forEach(function (x) { if (x.date) out.push({ _t: 'ot', d: x.date }); });
+        ((D().btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate, c: money(x.cost) }); });
+        ((D().fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d, c: money(x.cost) }); });
+        ((D().ontime && D().ontime.trips) || []).forEach(function (x) { if (x.date) out.push({ _t: 'ot', d: x.date }); });
         return out;
       },
       getDate: function (x) { return x.d; },
@@ -172,8 +175,8 @@
       higherIsBetter: false, stacked: true,
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate, c: money(x.cost) }); });
-        ((window.DATA && DATA.fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d, c: money(x.cost) }); });
+        ((D().btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate, c: money(x.cost) }); });
+        ((D().fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d, c: money(x.cost) }); });
         return out;
       },
       getDate: function (x) { return x.d; },
@@ -190,13 +193,13 @@
       note: 'Đối chiếu chỉ tiêu chính giữa các kỳ: % đáp ứng tăng cường, % ontime, số vụ phạt, lượt BTBD.',
       rows: function () {
         var out = [];
-        ((window.DATA && DATA.reinforcement) || []).forEach(function (x) {
+        ((D().reinforcement) || []).forEach(function (x) {
           var d = (typeof reinfDateOf === 'function') ? reinfDateOf(x) : (x.ts || x.requestDate);
           if (d) out.push({ _t: 'tc', d: d, st: noAcc(x.status) });
         });
-        ((window.DATA && DATA.ontime && DATA.ontime.trips) || []).forEach(function (x) { if (x.date) out.push({ _t: 'ot', d: x.date, on: x.onCheckin || 0, sp: x.stops || 0 }); });
-        ((window.DATA && DATA.fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d }); });
-        ((window.DATA && DATA.btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate }); });
+        ((D().ontime && D().ontime.trips) || []).forEach(function (x) { if (x.date) out.push({ _t: 'ot', d: x.date, on: x.onCheckin || 0, sp: x.stops || 0 }); });
+        ((D().fines) || []).forEach(function (x) { var d = x.violationTime || x.reportDate; if (d) out.push({ _t: 'ph', d: d }); });
+        ((D().btbd) || []).forEach(function (x) { if (x.inDate) out.push({ _t: 'bt', d: x.inDate }); });
         return out;
       },
       getDate: function (x) { return x.d; },
