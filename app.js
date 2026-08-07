@@ -1002,6 +1002,20 @@ function renderReinfSummary() {
   body.innerHTML = html;
 }
 
+// Cột "Ngày" trên sheet Tải tăng cường bị định dạng thành GIỜ (0:00) nên không dùng được.
+// Lấy ngày thật từ Timestamp tạo ticket (đã xử lý lỗi đảo ngày/tháng trong reinfDateOf).
+function reinfDateText(x) {
+  try {
+    const d = reinfDateOf(x);
+    if (d && !isNaN(d)) {
+      return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    }
+  } catch (e) {}
+  // dự phòng: nếu ô Ngày không phải dạng giờ thì vẫn hiển thị
+  const v = String(x.date == null ? '' : x.date).trim();
+  return /^\d{1,2}:\d{2}/.test(v) ? '—' : v;
+}
+
 function renderReinforcementTable() {
   const statusF = document.getElementById('filterReinfStatus').value;
   const supF = document.getElementById('filterReinfSupplier').value;
@@ -1017,7 +1031,7 @@ function renderReinforcementTable() {
       <td style="font-weight:600;color:var(--text-primary)">${escapeHTML(x.ticketId||'')}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis" title="${escapeHTML(x.warehouse||'')}">${escapeHTML(x.warehouse||'')}</td>
       <td>${escapeHTML(x.route||'')}</td><td>${escapeHTML(x.packages||'')}</td>
-      <td>${escapeHTML(x.date||'')}</td><td>${escapeHTML(x.arrivalTime||'')}</td>
+      <td>${escapeHTML(reinfDateText(x))}</td><td>${escapeHTML(x.arrivalTime||'')}</td>
       <td><span class="status ${escapeHTML(stCls)}">${escapeHTML(x.status||'')}</span></td>
       <td>${escapeHTML(x.supplier||'')}</td><td>${escapeHTML(x.plate||'')}</td><td>${escapeHTML(x.tonnage||'')}</td>
     </tr>`;
