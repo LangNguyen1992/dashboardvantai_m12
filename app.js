@@ -891,7 +891,35 @@ function setReinfSummaryMode(m) {
 // LƯU Ý dữ liệu gốc: trên Sheet, Timestamp nhập dd/mm nhưng Google hiểu nhầm mm/dd với ngày <=12
 // => ô bị ép thành DATE (serial) với ngày/tháng ĐẢO; ngày >12 giữ nguyên TEXT dd/mm (đúng).
 // Quy tắc khôi phục: chuỗi -> đọc dd/mm; serial -> đảo ngược ngày<->tháng.
+// [FIX] Xep ky theo NGAY CAN XE: 'Ngay mong muon' -> 'Ngay' -> Timestamp.
+function reinfParseDayMonth(v, ref) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return null;
+  var iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  var full = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (full) return new Date(+full[3], +full[2] - 1, +full[1]);
+  var dm = t.match(/^(\d{1,2})\/(\d{1,2})(?!\/)/);
+  if (dm && ref) {
+    var day = +dm[1], mon = +dm[2];
+    if (day < 1 || day > 31 || mon < 1 || mon > 12) return null;
+    var c = [ref.getFullYear() - 1, ref.getFullYear(), ref.getFullYear() + 1].map(function (y) { return new Date(y, mon - 1, day); });
+    c.sort(function (a, b) { return Math.abs(a - ref) - Math.abs(b - ref); });
+    return c[0];
+  }
+  return null;
+}
+
 function reinfDateOf(x) {
+  var ref = reinfTsDateOf(x), d;
+  d = reinfParseDayMonth(x.requestDate, ref);
+  if (d && !isNaN(d) && (!ref || Math.abs(d - ref) <= 7 * 86400000)) return d;
+  d = reinfParseDayMonth(x.date, ref);
+  if (d && !isNaN(d) && (!ref || Math.abs(d - ref) <= 7 * 86400000)) return d;
+  return ref;
+}
+
+function reinfTsDateOf(x) {
   var v = x.ts;
   if (v != null && v !== '') {
     if (typeof v === 'number' || (/^\d+(\.\d+)?$/.test(String(v).trim()) && Number(v) > 20000)) {
@@ -952,16 +980,18 @@ function renderReinfSummary() {
       sortKey = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
       label = ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
     }
-    var g = groups[key] || (groups[key] = { label: label, sortKey: sortKey, t: 0, ok: 0, no: 0, cancel: 0 });
+    var g = groups[key] || (groups[key] = { label: label, sortKey: sortKey, t: 0, ok: 0, no: 0, cancel: 0, booked: 0, pending: 0 });
     g.t++;
     var st = String(x.status || '');
     if (/^có xe/i.test(st)) g.ok++;
     else if (/^không có xe/i.test(st)) g.no++;
     else if (/^hủy/i.test(st)) g.cancel++;
+    else if (/^bc đã book xe/i.test(st)) g.booked++;
+    else g.pending++;
   });
 
   var list = Object.keys(groups).map(function (k) { return groups[k]; }).sort(function (a, b) { return a.sortKey - b.sortKey; });
-  if (!list.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu</td></tr>'; return; }
+  if (!list.length) { body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu</td></tr>'; return; }
 
   // tính Δ theo thứ tự thời gian
   list.forEach(function (g, i) {
@@ -972,7 +1002,7 @@ function renderReinfSummary() {
     g.dRate = (p && p.rate != null && g.rate != null) ? (g.rate - p.rate) * 100 : null;
   });
 
-  var totalRow = list.reduce(function (s, g) { s.t += g.t; s.ok += g.ok; s.no += g.no; s.cancel += g.cancel; return s; }, { t: 0, ok: 0, no: 0, cancel: 0 });
+  var totalRow = list.reduce(function (s, g) { s.t += g.t; s.ok += g.ok; s.no += g.no; s.cancel += g.cancel; s.booked += g.booked; s.pending += g.pending; return s; }, { t: 0, ok: 0, no: 0, cancel: 0, booked: 0, pending: 0 });
   totalRow.real = totalRow.ok + totalRow.no;
   totalRow.rate = totalRow.real ? totalRow.ok / totalRow.real : null;
 
@@ -992,12 +1022,15 @@ function renderReinfSummary() {
   // hiển thị kỳ mới nhất trước
   var html = list.slice().reverse().map(function (g) {
     return '<tr><td style="font-weight:600">' + escapeHTML(g.label) + '</td>' +
-      '<td>' + g.t + '</td><td>' + g.ok + '</td><td>' + g.no + '</td><td>' + g.cancel + '</td><td>' + g.real + '</td>' +
+      '<td>' + g.t + '</td><td>' + g.ok + '</td><td>' + g.no + '</td><td>' + g.cancel + '</td>' +
+      '<td>' + g.booked + '</td><td' + (g.pending ? ' style="color:var(--warning);font-weight:700"' : '') + '>' + g.pending + '</td>' +
+      '<td>' + g.real + '</td>' +
       rateCell(g.rate) + deltaCell(g.dT, '') + deltaCell(g.dRate, ' đ%') + '</tr>';
   }).join('');
   html += '<tr style="background:var(--accent-light)"><td style="font-weight:800">TỔNG</td>' +
     '<td style="font-weight:800">' + totalRow.t + '</td><td style="font-weight:800">' + totalRow.ok + '</td>' +
     '<td style="font-weight:800">' + totalRow.no + '</td><td style="font-weight:800">' + totalRow.cancel + '</td>' +
+    '<td style="font-weight:800">' + totalRow.booked + '</td><td style="font-weight:800">' + totalRow.pending + '</td>' +
     '<td style="font-weight:800">' + totalRow.real + '</td>' + rateCell(totalRow.rate) + '<td>—</td><td>—</td></tr>';
   body.innerHTML = html;
 }
@@ -1484,7 +1517,8 @@ function loadCachedFullData() {
       if (parsed.reinforcement) DATA.reinforcement = parsed.reinforcement;
       if (parsed.ontime) DATA.ontime = parsed.ontime;
       if (parsed.btbd) DATA.btbd = parsed.btbd;
-      setTimeout(() => updateGlobalSyncStatus(cachedTime), 50);
+      DATA_SOURCE_INFO = { mode: 'cache', time: cachedTime };
+      setTimeout(() => { updateGlobalSyncStatus(cachedTime); renderStaleBanner(); }, 50);
     } else {
       setTimeout(() => updateGlobalSyncStatus(null), 50);
     }
@@ -1540,6 +1574,45 @@ async function fetchSheetAsWorksheet(id, name) {
 const SYNC_SHEET_NAMES = ['Thông tin xe', 'Lịch tải', 'Phạt nguội', 'Hiệu suất sử dụng xe', 'Nhân sự', 'Tải tăng cường Lấy'];
 const SYNC_OPTIONAL_SHEETS = ['Ontime xe tải', 'BTBD'];
 
+var DATA_SOURCE_INFO = { mode: 'unknown', time: null };
+
+async function loadDailySnapshot() {
+  try {
+    const res = await fetch('./data-snapshot.json?v=' + Date.now());
+    if (!res.ok) return false;
+    const snap = await res.json();
+    if (!snap || !snap.sheets) return false;
+    const wb = { SheetNames: [], Sheets: {} };
+    for (const name of Object.keys(snap.sheets)) {
+      wb.SheetNames.push(name);
+      wb.Sheets[name] = XLSX.utils.aoa_to_sheet(snap.sheets[name], { cellDates: true });
+    }
+    processAndApplyWorkbook(wb);
+    DATA_SOURCE_INFO = { mode: 'snapshot', time: snap.generatedAt || null };
+    return true;
+  } catch (e) { return false; }
+}
+
+function renderStaleBanner() {
+  var el = document.getElementById('dataStaleBanner');
+  if (DATA_SOURCE_INFO.mode === 'live') { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dataStaleBanner';
+    el.style.cssText = 'position:sticky;top:0;z-index:9999;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;border-bottom:2px solid';
+    var host = document.querySelector('.main-content') || document.body;
+    host.insertBefore(el, host.firstChild);
+  }
+  var t = DATA_SOURCE_INFO.time || localStorage.getItem('cached_full_time') || 'khong ro';
+  if (DATA_SOURCE_INFO.mode === 'snapshot') {
+    el.style.background = '#fef3c7'; el.style.color = '#78350f'; el.style.borderBottomColor = '#d97706';
+    el.textContent = 'DU LIEU ANH CHUP HANG NGAY - cap nhat luc ' + t + '. Ticket phat sinh sau moc nay chua co.';
+  } else {
+    el.style.background = '#fee2e2'; el.style.color = '#7f1d1d'; el.style.borderBottomColor = '#b91c1c';
+    el.textContent = 'CANH BAO: KHONG DONG BO DUOC GOOGLE SHEET. Dang hien thi du lieu cu tu ' + t + '. KHONG dung so lieu nay de bao cao.';
+  }
+}
+
 async function syncGoogleSheetRealtime(silent = false) {
   const statusTime = document.getElementById('globalSyncTime');
   if (statusTime) {
@@ -1567,8 +1640,12 @@ async function syncGoogleSheetRealtime(silent = false) {
     }
 
     processAndApplyWorkbook(workbook);
+    DATA_SOURCE_INFO = { mode: 'live', time: new Date().toLocaleString('vi-VN') };
+    renderStaleBanner();
   } catch (error) {
     console.error('Realtime Sync error:', error);
+    if (await loadDailySnapshot()) { renderStaleBanner(); return; }
+    renderStaleBanner();
     if (statusTime) {
       const cachedTime = localStorage.getItem('cached_full_time');
       if (cachedTime) {
