@@ -891,7 +891,7 @@ function setReinfSummaryMode(m) {
 // LƯU Ý dữ liệu gốc: trên Sheet, Timestamp nhập dd/mm nhưng Google hiểu nhầm mm/dd với ngày <=12
 // => ô bị ép thành DATE (serial) với ngày/tháng ĐẢO; ngày >12 giữ nguyên TEXT dd/mm (đúng).
 // Quy tắc khôi phục: chuỗi -> đọc dd/mm; serial -> đảo ngược ngày<->tháng.
-// [FIX] Xep ky theo NGAY CAN XE: 'Ngay mong muon' -> 'Ngay' -> Timestamp.
+// [FIX] Xếp kỳ theo NGÀY CẦN XE: 'Ngày mong muốn' -> 'Ngày' -> Timestamp.
 function reinfParseDayMonth(v, ref) {
   var t = String(v == null ? '' : v).trim();
   if (!t) return null;
@@ -1606,10 +1606,10 @@ function renderStaleBanner() {
   var t = DATA_SOURCE_INFO.time || localStorage.getItem('cached_full_time') || 'khong ro';
   if (DATA_SOURCE_INFO.mode === 'snapshot') {
     el.style.background = '#fef3c7'; el.style.color = '#78350f'; el.style.borderBottomColor = '#d97706';
-    el.textContent = 'DU LIEU ANH CHUP HANG NGAY - cap nhat luc ' + t + '. Ticket phat sinh sau moc nay chua co.';
+    el.textContent = 'Dữ liệu ảnh chụp hằng ngày — cập nhật lúc ' + t + '. Ticket phát sinh sau mốc này chưa có.';
   } else {
     el.style.background = '#fee2e2'; el.style.color = '#7f1d1d'; el.style.borderBottomColor = '#b91c1c';
-    el.textContent = 'CANH BAO: KHONG DONG BO DUOC GOOGLE SHEET. Dang hien thi du lieu cu tu ' + t + '. KHONG dung so lieu nay de bao cao.';
+    el.textContent = 'Chưa đồng bộ được Google Sheet — đang hiển thị dữ liệu cũ lưu trong trình duyệt từ ' + t + '. Số liệu chưa đầy đủ, cần làm mới trước khi dùng để báo cáo.';
   }
 }
 
