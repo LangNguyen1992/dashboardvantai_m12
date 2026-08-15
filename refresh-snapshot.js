@@ -11,7 +11,7 @@
  * ========================================================================== */
 (async () => {
   const SHEET_ID = '12Pe7N5dByhBw2XF4pZOkEgYb7_F14NgQlryhdhUlGf8';
-  const GH_OWNER = 'cdtnguyenlang';
+  const GH_OWNER = 'LangNguyen1992';
   const GH_REPO  = 'dashboardvantai_m12';
   const GH_PATH  = 'data-snapshot.json';
   const GH_TOKEN = 'PASTE_FINE_GRAINED_PAT_HERE';
@@ -46,6 +46,9 @@
       report.push(name + ': BO QUA (' + e.message + ')');
     }
   }
+
+  // Tab 'Lich tai' dang tra ve #REF! tren Sheet -> chen dong tieu de rong de app khong vo khi parse.
+  if (!sheets['Lịch tải']) sheets['Lịch tải'] = [['Tuyến','Tải trọng','ID','Tên kho','Loại hình','Tới điểm','Rời điểm','Loại tuyến']];
 
   const payload = {
     generatedAt: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
