@@ -32,22 +32,35 @@ function parseCSV(s) {
   const report = [];
   let ok = 0;
 
+  // Thu lan luot 3 cach lay CSV: gviz -> export -> published-to-web
+  function urlsFor(name) {
+    const id = SHEET_ID, n = encodeURIComponent(name);
+    return [
+      ['gviz',   'https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&headers=1&sheet=' + n],
+      ['export', 'https://docs.google.com/spreadsheets/d/' + id + '/export?format=csv&sheet=' + n],
+      ['pub',    'https://docs.google.com/spreadsheets/d/e/' + id + '/pub?output=csv&sheet=' + n]
+    ];
+  }
+
   for (const name of SHEETS) {
-    const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
-                '/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent(name);
-    try {
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const txt = await res.text();
-      if (/^\s*<!DOCTYPE|accounts\.google\.com/i.test(txt)) throw new Error('bi doi dang nhap (Sheet chua public)');
-      const rows = parseCSV(txt);
-      if (rows.length < 2) throw new Error('rong hoac #REF!');
-      sheets[name] = rows;
-      ok++;
-      report.push('OK   ' + name + ': ' + (rows.length - 1) + ' dong');
-    } catch (e) {
-      report.push('BO QUA ' + name + ': ' + e.message);
+    let done = false, lastErr = '';
+    for (const [cach, url] of urlsFor(name)) {
+      try {
+        const res = await fetch(url, { redirect: 'follow' });
+        const txt = await res.text();
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (/^\s*<!DOCTYPE|accounts\.google\.com|ServiceLogin/i.test(txt)) throw new Error('bi doi trang dang nhap');
+        const rows = parseCSV(txt);
+        if (rows.length < 2) throw new Error('rong hoac #REF!');
+        sheets[name] = rows;
+        ok++; done = true;
+        report.push('OK   [' + cach + '] ' + name + ': ' + (rows.length - 1) + ' dong');
+        break;
+      } catch (e) {
+        lastErr = '[' + cach + '] ' + e.message;
+      }
     }
+    if (!done) report.push('BO QUA ' + name + ': ' + lastErr);
   }
 
   console.log(report.join('\n'));
