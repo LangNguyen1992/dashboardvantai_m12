@@ -1576,6 +1576,33 @@ const SYNC_OPTIONAL_SHEETS = ['Ontime xe tải', 'BTBD'];
 
 var DATA_SOURCE_INFO = { mode: 'unknown', time: null };
 
+/* LỖI ĐÃ GẶP 28/08/2026: localStorage chỉ có ~5MB cho mỗi tên miền. Khi BTBD nhảy lên
+ * 11.755 dòng và Ontime 5.363 dòng, chuỗi JSON vượt hạn mức -> setItem ném
+ * QuotaExceededError NGAY GIỮA processAndApplyWorkbook -> hàm chết -> loadDailySnapshot
+ * trả false -> dashboard tưởng mất mạng và quay về cache cũ. Ghi cache chỉ là tiện ích,
+ * tuyệt đối không được phép làm đổ luồng nạp dữ liệu. */
+function cacheFullData(payload, timeStr) {
+  const light = Object.assign({}, payload, {
+    btbd: [], ontime: { groups: [], weeks: [], weekly: {}, trips: [] }
+  });
+  const tries = [payload, light];           // thử bản đầy đủ, chật thì thử bản rút gọn
+  for (let i = 0; i < tries.length; i++) {
+    try {
+      localStorage.setItem('cached_full_data', JSON.stringify(tries[i]));
+      localStorage.setItem('cached_full_time', timeStr);
+      if (i > 0) console.warn('Cache trình duyệt chỉ lưu được bản rút gọn (bỏ BTBD + Ontime).');
+      return true;
+    } catch (e) {
+      console.warn('Ghi cache thất bại (' + ((e && e.name) || e) + ').');
+      try { localStorage.removeItem('cached_full_data'); } catch (e2) {}
+    }
+  }
+  // Không lưu được thì thôi: data-snapshot.json cùng origin đã là nguồn dự phòng đủ tốt.
+  try { localStorage.removeItem('cached_full_time'); } catch (e) {}
+  console.warn('Bỏ qua cache trình duyệt — dữ liệu vượt hạn mức. Dashboard vẫn chạy bằng data-snapshot.json.');
+  return false;
+}
+
 async function loadDailySnapshot() {
   try {
     const res = await fetch('./data-snapshot.json?v=' + Date.now());
@@ -1590,7 +1617,11 @@ async function loadDailySnapshot() {
     processAndApplyWorkbook(wb);
     DATA_SOURCE_INFO = { mode: 'snapshot', time: snap.generatedAt || null };
     return true;
-  } catch (e) { return false; }
+  } catch (e) {
+    // Không nuốt lỗi im lặng nữa — lần trước chính chỗ này che mất QuotaExceededError.
+    console.error('loadDailySnapshot thất bại:', e);
+    return false;
+  }
 }
 
 function renderStaleBanner() {
@@ -1945,13 +1976,10 @@ function processAndApplyWorkbook(workbook) {
   DATA.ontime = ontime;
   DATA.btbd = btbd;
 
-  // Persist to localStorage
+  // Persist to localStorage (không bao giờ để lỗi ghi cache làm hỏng việc nạp dữ liệu)
   const now = new Date();
   const timeStr = now.toLocaleTimeString('vi-VN') + ' (' + now.toLocaleDateString('vi-VN') + ')';
-  localStorage.setItem('cached_full_data', JSON.stringify({
-    vehicles, routes, fines, efficiency, drivers, reinforcement, ontime, btbd
-  }));
-  localStorage.setItem('cached_full_time', timeStr);
+  cacheFullData({ vehicles, routes, fines, efficiency, drivers, reinforcement, ontime, btbd }, timeStr);
 
   // Update top sync status display
   updateGlobalSyncStatus(timeStr);
