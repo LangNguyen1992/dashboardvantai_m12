@@ -919,7 +919,28 @@ function reinfDateOf(x) {
   return ref;
 }
 
+// Ngày TẠO ticket, dùng làm mốc tham chiếu để suy ra năm cho các ô chỉ có "dd/mm".
+// Ưu tiên cột "Date" mới: Sheet đã chuẩn hóa sẵn, hiển thị m/d/yyyy (locale Mỹ),
+// nên đọc thẳng, không phải đoán như Timestamp (ô nhập tay dd/mm bị Google hiểu mm/dd).
+function reinfCleanDateOf(x) {
+  var t = String(x.dateClean == null ? '' : x.dateClean).trim();
+  if (!t) return null;
+  var m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);   // m/d/yyyy
+  if (m) {
+    var mon = +m[1], day = +m[2];
+    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
+      var d = new Date(+m[3], mon - 1, day);
+      if (!isNaN(d)) return d;
+    }
+  }
+  var iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  return null;
+}
+
 function reinfTsDateOf(x) {
+  var clean = reinfCleanDateOf(x);
+  if (clean) return clean;
   var v = x.ts;
   if (v != null && v !== '') {
     if (typeof v === 'number' || (/^\d+(\.\d+)?$/.test(String(v).trim()) && Number(v) > 20000)) {
@@ -1891,6 +1912,9 @@ function processAndApplyWorkbook(workbook) {
       note: cellS(row, rfMap, 'Ghi chú'),
       status: cellS(row, rfMap, 'Trạng thái'),
       date: cellS(row, rfMap, 'Ngày'),
+      // Cột "Date" (thêm 09/2026): phần ngày của Timestamp đã được Sheet chuẩn hóa,
+      // hiển thị m/d/yyyy. Phủ 97,4% dòng và KHÔNG dính lỗi đảo ngày/tháng như Timestamp.
+      dateClean: cellS(row, rfMap, ['Date', 'Ngày tạo']),
       arrivalTime: cellS(row, rfMap, 'Giờ tới'),
       tripCode: cellS(row, rfMap, 'Mã chuyến đi'),
       supplier: cellS(row, rfMap, ['Tên NCC', 'NCC']),
