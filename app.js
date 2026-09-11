@@ -877,6 +877,7 @@ function renderReinforcement() {
   populateSelect('filterReinfSupplier', Object.keys(suppliers).sort());
   renderReinforcementTable();
   renderReinfSummary();
+  renderReinfShift();
 }
 
 // ==== TỔNG HỢP TĂNG CƯỜNG THEO KỲ (Ngày/Tuần/Tháng) ====
@@ -1091,6 +1092,205 @@ function renderReinforcementTable() {
     </tr>`;
   }).join('');
 }
+/* ============================================================================
+ * TĂNG CƯỜNG LẤY — PHÂN TÍCH THEO CA TRỰC
+ * Ca xác định theo GIỜ CẦN XE (cột "Ngày mong muốn" dạng "dd/mm HH:MM", phủ 100%
+ * dữ liệu), dự phòng cột "Giờ tới". Mốc ca theo lịch trực GSVT cụm M12:
+ *   Ca 1: 07:00–15:00 | Ca 2: 15:00–23:00 | Ca 3: 23:00–07:00
+ * ==========================================================================*/
+window._reinfShiftMode = window._reinfShiftMode || 'all';
+
+var REINF_SHIFTS = [
+  { id: 1, name: 'Ca 1', range: '07:00–15:00', color: '#0891b2' },
+  { id: 2, name: 'Ca 2', range: '15:00–23:00', color: '#16a34a' },
+  { id: 3, name: 'Ca 3', range: '23:00–07:00', color: '#8b5cf6' }
+];
+
+function setReinfShiftMode(m) { window._reinfShiftMode = m; renderReinfShift(); }
+
+function reinfHourOf(x) {
+  var m = String(x.requestDate == null ? '' : x.requestDate).match(/(\d{1,2}):(\d{2})\s*$/);
+  if (!m) m = String(x.arrivalTime == null ? '' : x.arrivalTime).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  var h = +m[1];
+  return (h >= 0 && h <= 23) ? h : null;
+}
+
+function reinfShiftOf(h) {
+  if (h == null) return null;
+  if (h >= 7 && h < 15) return 1;
+  if (h >= 15 && h < 23) return 2;
+  return 3;
+}
+
+function reinfStatusKind(s) {
+  var t = String(s == null ? '' : s).toLowerCase().normalize('NFD')
+    .replace(new RegExp('[\\u0300-\\u036f]', 'g'), '').replace(/đ/g, 'd').trim();
+  if (t.indexOf('khong co xe') === 0) return 'no';      // phải xét trước 'co xe'
+  if (t.indexOf('co xe') === 0) return 'ok';
+  if (t.indexOf('huy') === 0) return 'cancel';
+  if (t.indexOf('bc da book') === 0) return 'booked';
+  return 'other';
+}
+
+// Trả về toàn bộ bản ghi đã gắn ca + ngày; lọc theo mốc thời gian đang chọn.
+function reinfShiftRows(ignoreMode) {
+  var all = (DATA.reinforcement || []).map(function (x) {
+    var h = reinfHourOf(x);
+    return { h: h, s: reinfShiftOf(h), d: reinfDateOf(x), k: reinfStatusKind(x.status) };
+  }).filter(function (r) { return r.s && r.d && !isNaN(r.d); });
+
+  var mode = window._reinfShiftMode;
+  if (ignoreMode || mode === 'all' || !all.length) return all;
+  var max = all[0].d;
+  all.forEach(function (r) { if (r.d > max) max = r.d; });
+  var back = (mode === 'm3') ? 2 : 0;
+  var from = new Date(max.getFullYear(), max.getMonth() - back, 1);
+  return all.filter(function (r) { return r.d >= from; });
+}
+
+function reinfAgg(rows) {
+  var a = { t: rows.length, ok: 0, no: 0, cancel: 0, booked: 0 };
+  rows.forEach(function (r) { if (a[r.k] != null) a[r.k]++; });
+  a.need = a.ok + a.no;
+  a.rate = a.need ? (a.ok / a.need * 100) : null;
+  return a;
+}
+
+function reinfRateColor(v) {
+  if (v == null) return 'var(--text-muted)';
+  if (v >= 90) return 'var(--success, #16a34a)';
+  if (v >= 80) return 'var(--warning, #d97706)';
+  return 'var(--danger, #dc2626)';
+}
+
+window._reinfShiftCharts = window._reinfShiftCharts || {};
+function reinfChart(id, cfg) {
+  var el = document.getElementById(id);
+  if (!el || typeof Chart === 'undefined') return;
+  if (window._reinfShiftCharts[id]) { try { window._reinfShiftCharts[id].destroy(); } catch (e) {} }
+  window._reinfShiftCharts[id] = new Chart(el, cfg);
+}
+
+function renderReinfShift() {
+  var body = document.getElementById('reinfShiftBody');
+  if (!body) return;
+
+  var mode = window._reinfShiftMode;
+  document.querySelectorAll('.reinf-shift-btn').forEach(function (b) {
+    var on = b.dataset.sm === mode;
+    b.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;font-weight:' +
+      (on ? '700;background:var(--accent);color:#fff' : '400;background:var(--bg-card);color:var(--text-secondary)');
+  });
+
+  var rows = reinfShiftRows();
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu</td></tr>';
+    return;
+  }
+
+  var tong = reinfAgg(rows);
+  var html = '';
+  REINF_SHIFTS.forEach(function (sh) {
+    var a = reinfAgg(rows.filter(function (r) { return r.s === sh.id; }));
+    var tyTrongYC = tong.t ? a.t / tong.t * 100 : 0;
+    var tyTrongHut = tong.no ? a.no / tong.no * 100 : 0;
+    // Hụt vượt mức = gánh phần hụt nhiều hơn tỷ trọng khối lượng -> tô đỏ để nhận ra ngay
+    var vuotMuc = tyTrongHut > tyTrongYC + 3;
+    html += '<tr>' +
+      '<td style="font-weight:600"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + sh.color + ';margin-right:6px"></span>' +
+        sh.name + ' <span style="color:var(--text-muted);font-weight:400">(' + sh.range + ')</span></td>' +
+      '<td>' + a.t.toLocaleString('vi-VN') + '</td>' +
+      '<td>' + tyTrongYC.toFixed(1) + '%</td>' +
+      '<td style="color:var(--success,#16a34a)">' + a.ok.toLocaleString('vi-VN') + '</td>' +
+      '<td style="color:var(--danger,#dc2626)">' + a.no.toLocaleString('vi-VN') + '</td>' +
+      '<td>' + a.cancel.toLocaleString('vi-VN') + '</td>' +
+      '<td>' + a.need.toLocaleString('vi-VN') + '</td>' +
+      '<td style="font-weight:700;color:' + reinfRateColor(a.rate) + '">' + (a.rate == null ? '–' : a.rate.toFixed(1) + '%') + '</td>' +
+      '<td style="' + (vuotMuc ? 'font-weight:700;color:var(--danger,#dc2626)' : '') + '">' + tyTrongHut.toFixed(1) + '%' +
+        (vuotMuc ? ' ▲' : '') + '</td>' +
+      '</tr>';
+  });
+  html += '<tr style="border-top:2px solid var(--border-color);font-weight:700">' +
+    '<td>TỔNG</td><td>' + tong.t.toLocaleString('vi-VN') + '</td><td>100,0%</td>' +
+    '<td>' + tong.ok.toLocaleString('vi-VN') + '</td><td>' + tong.no.toLocaleString('vi-VN') + '</td>' +
+    '<td>' + tong.cancel.toLocaleString('vi-VN') + '</td><td>' + tong.need.toLocaleString('vi-VN') + '</td>' +
+    '<td style="color:' + reinfRateColor(tong.rate) + '">' + (tong.rate == null ? '–' : tong.rate.toFixed(1) + '%') + '</td>' +
+    '<td>100,0%</td></tr>';
+  body.innerHTML = html;
+
+  renderReinfShiftCharts(rows);
+}
+
+function renderReinfShiftCharts(rows) {
+  // --- Biểu đồ 1: xu hướng % đáp ứng theo tháng, tách 3 ca (luôn lấy TOÀN BỘ lịch sử) ---
+  var full = reinfShiftRows(true);
+  var keys = {};
+  full.forEach(function (r) {
+    keys[r.d.getFullYear() + '-' + ('0' + (r.d.getMonth() + 1)).slice(-2)] = 1;
+  });
+  var months = Object.keys(keys).sort();
+  var ds = REINF_SHIFTS.map(function (sh) {
+    return {
+      label: sh.name, borderColor: sh.color, backgroundColor: sh.color,
+      tension: 0.3, spanGaps: true, pointRadius: 3,
+      data: months.map(function (mk) {
+        var a = reinfAgg(full.filter(function (r) {
+          return r.s === sh.id && (r.d.getFullYear() + '-' + ('0' + (r.d.getMonth() + 1)).slice(-2)) === mk;
+        }));
+        return a.need >= 5 ? +a.rate.toFixed(1) : null;   // dưới 5 nhu cầu thì tỷ lệ không có ý nghĩa
+      })
+    };
+  });
+  reinfChart('chartReinfShiftTrend', {
+    type: 'line',
+    data: { labels: months, datasets: ds },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } },
+        tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + (c.parsed.y == null ? 'n/a' : c.parsed.y + '%'); } } }
+      },
+      scales: { y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
+    }
+  });
+
+  // --- Biểu đồ 2: nhu cầu theo giờ (cột) + % đáp ứng (đường) ---
+  var gio = [], yc = [], rate = [], mau = [];
+  for (var h = 0; h < 24; h++) {
+    var a = reinfAgg(rows.filter(function (r) { return r.h === h; }));
+    gio.push(('0' + h).slice(-2) + 'h');
+    yc.push(a.t);
+    rate.push(a.need >= 5 ? +a.rate.toFixed(1) : null);
+    var s = reinfShiftOf(h);
+    mau.push((REINF_SHIFTS.filter(function (x) { return x.id === s; })[0] || {}).color || '#888');
+  }
+  reinfChart('chartReinfHour', {
+    data: {
+      labels: gio,
+      datasets: [
+        { type: 'bar', label: 'Số yêu cầu', data: yc, backgroundColor: mau, borderWidth: 0, order: 2, yAxisID: 'y' },
+        { type: 'line', label: '% Đáp ứng', data: rate, borderColor: '#ef4444', backgroundColor: '#ef4444',
+          tension: 0.3, spanGaps: true, pointRadius: 2, borderWidth: 2, order: 1, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } },
+        tooltip: { callbacks: { label: function (c) {
+          return c.dataset.label + ': ' + (c.parsed.y == null ? 'n/a' : (c.dataset.yAxisID === 'y1' ? c.parsed.y + '%' : c.parsed.y.toLocaleString('vi-VN')));
+        } } }
+      },
+      scales: {
+        y: { position: 'left', title: { display: true, text: 'Số yêu cầu' } },
+        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
+              ticks: { callback: function (v) { return v + '%'; } } }
+      }
+    }
+  });
+}
+
 // ==================== PAGE: ONTIME XE TẢI (dữ liệu theo chuyến) ====================
 // Dữ liệu nguồn: DATA.ontime.trips = [{date, trip, schedule, route, tonnage, driver,
 // plate, partner, onCheckin, stops, rate}]. Tổng hợp theo Ngày / Tuần / Quý / Năm.

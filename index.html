@@ -739,6 +739,51 @@
           </div>
         </div>
 
+        <!-- PHÂN TÍCH THEO CA TRỰC (Ca 1 07-15h / Ca 2 15-23h / Ca 3 23-07h) -->
+        <div class="table-card">
+          <div class="table-header">
+            <h3>🕐 Tỷ lệ đáp ứng theo ca trực</h3>
+            <div style="display:flex;gap:6px">
+              <button class="reinf-shift-btn" data-sm="all" onclick="setReinfShiftMode('all')">Toàn kỳ</button>
+              <button class="reinf-shift-btn" data-sm="m3" onclick="setReinfShiftMode('m3')">3 tháng gần nhất</button>
+              <button class="reinf-shift-btn" data-sm="m1" onclick="setReinfShiftMode('m1')">Tháng này</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ca trực</th>
+                  <th>Yêu cầu</th>
+                  <th>Tỷ trọng YC</th>
+                  <th>Có xe</th>
+                  <th>Không có xe</th>
+                  <th>Hủy</th>
+                  <th>Nhu cầu thực</th>
+                  <th>% Đáp ứng</th>
+                  <th>Tỷ trọng hụt xe</th>
+                </tr>
+              </thead>
+              <tbody id="reinfShiftBody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);padding:8px 4px 0" id="reinfShiftNote">
+            Ca xác định theo GIỜ CẦN XE ở cột "Ngày mong muốn". Ca 1: 07:00–15:00 · Ca 2: 15:00–23:00 · Ca 3: 23:00–07:00.
+            Tỷ trọng hụt xe = phần đóng góp của ca đó vào tổng số vụ "Không có xe" — so với cột Tỷ trọng YC để biết ca nào hụt vượt mức.
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--accent)"></span> Xu hướng % đáp ứng theo ca</div>
+            <canvas id="chartReinfShiftTrend"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--warning,#d97706)"></span> Nhu cầu &amp; đáp ứng theo giờ trong ngày</div>
+            <canvas id="chartReinfHour"></canvas>
+          </div>
+        </div>
+
         <div class="table-card">
           <div class="table-header">
             <h3>📦 Danh sách yêu cầu tải tăng cường</h3>
