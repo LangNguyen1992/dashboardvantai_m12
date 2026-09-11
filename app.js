@@ -530,7 +530,7 @@ function renderVehicleTable() {
   const statusF = document.getElementById('filterVehicleStatus').value;
   const regionF = document.getElementById('filterVehicleRegion').value;
   const warnF = document.getElementById('filterVehicleWarning').value;
-  const search = (document.getElementById('searchVehicle').value||'').toLowerCase();
+  const search = oTimKiem('searchVehicle');
   let data = DATA.vehicles;
   if (statusF) data = data.filter(x => x.status === statusF);
   if (regionF) data = data.filter(x => x.region === regionF);
@@ -583,7 +583,7 @@ function renderSchedule() {
 function renderScheduleTable() {
   const typeF = document.getElementById('filterRouteType').value;
   const supF = document.getElementById('filterRouteSupplier').value;
-  const search = (document.getElementById('searchRoute').value||'').toLowerCase();
+  const search = oTimKiem('searchRoute');
   let data = DATA.routes;
   if (typeF) data = data.filter(x => x.type && x.type.includes(typeF));
   if (supF) data = data.filter(x => x.supplier === supF);
@@ -835,7 +835,7 @@ function renderStaffCharts() {
 function renderStaffTable() {
   const statusF = document.getElementById('filterDriverStatus').value;
   const posF = document.getElementById('filterDriverPosition').value;
-  const search = (document.getElementById('searchDriver').value||'').toLowerCase();
+  const search = oTimKiem('searchDriver');
   let data = DATA.drivers;
   if (statusF) data = data.filter(x => x.status === statusF);
   if (posF) data = data.filter(x => x.position === posF);
@@ -1074,7 +1074,7 @@ function reinfDateText(x) {
 function renderReinforcementTable() {
   const statusF = document.getElementById('filterReinfStatus').value;
   const supF = document.getElementById('filterReinfSupplier').value;
-  const search = (document.getElementById('searchReinf').value||'').toLowerCase();
+  const search = oTimKiem('searchReinf');
   let data = DATA.reinforcement;
   if (statusF) data = data.filter(x => x.status === statusF);
   if (supF) data = data.filter(x => x.supplier === supF);
@@ -1582,7 +1582,7 @@ function renderBTBD() {
 function renderBTBDTable() {
   const cF = document.getElementById('filterBTBDContent').value;
   const sF = document.getElementById('filterBTBDStatus').value;
-  const search = (document.getElementById('searchBTBD').value || '').toLowerCase();
+  const search = oTimKiem('searchBTBD');
   let data = DATA.btbd || [];
   if (cF) data = data.filter(x => x.content === cF);
   if (sF === 'in') data = data.filter(x => !x.outDate);
@@ -1790,6 +1790,20 @@ function colIdx(cmap, names){
 }
 function cellRaw(row, cmap, names){ const i = colIdx(cmap, names); return i >= 0 ? row[i] : null; }
 function cellS(row, cmap, names){ const i = colIdx(cmap, names); return i >= 0 ? ser(row[i]) : null; }
+
+/* Đọc ô tìm kiếm của các bảng.
+ * Chrome nhớ email ở màn hình đăng nhập rồi tự điền vào ô tìm kiếm sau khi đăng nhập
+ * xong — người dùng thấy bảng trống trơn mà không hiểu vì sao (đã gặp 11/09/2026).
+ * Thuộc tính autocomplete="off" không phải lúc nào Chrome cũng tôn trọng, nên chặn
+ * thêm ở đây: chuỗi tìm kiếm chứa "@" chắc chắn không phải mã ticket / tên bưu cục /
+ * biển số, nên coi như rỗng và dọn luôn ô nhập. */
+function oTimKiem(id) {
+  var el = document.getElementById(id);
+  if (!el) return '';
+  var v = String(el.value || '');
+  if (v.indexOf('@') !== -1) { el.value = ''; return ''; }
+  return v.toLowerCase();
+}
 
 function loadCachedFullData() {
   try {
@@ -2342,11 +2356,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // sạch mà người dùng không hiểu vì sao. Dọn sạch ô tìm kiếm mỗi lần mở trang.
   var donOTimKiem = function () {
     document.querySelectorAll('.table-search input').forEach(function (o) {
-      if (o.value) { o.value = ''; }
+      // chỉ dọn thứ Chrome tự điền (email), không đụng vào chữ người dùng đang gõ
+      if (o.value && o.value.indexOf('@') !== -1) {
+        o.value = '';
+        o.dispatchEvent(new Event('input', { bubbles: true }));   // vẽ lại bảng ngay
+      }
     });
   };
   donOTimKiem();
-  setTimeout(donOTimKiem, 400);   // Chrome điền trễ sau khi trang dựng xong
+  // Chrome điền trễ, và điền LẠI sau khi người dùng đăng nhập xong -> quét nhiều nhịp
+  [400, 1500, 4000, 8000].forEach(function (ms) { setTimeout(donOTimKiem, ms); });
+  window.addEventListener('focus', donOTimKiem);
 
   loadCachedFullData();
   renderDashboard();
