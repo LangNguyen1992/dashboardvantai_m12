@@ -298,7 +298,7 @@
                 <option value="expiring">Sắp hết hạn</option>
               </select>
               <div class="table-search">
-                🔍<input type="text" placeholder="Tìm biển số..." id="searchVehicle" oninput="renderVehicleTable()">
+                🔍<input type="text" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Tìm biển số..." id="searchVehicle" oninput="renderVehicleTable()">
               </div>
             </div>
           </div>
@@ -344,7 +344,7 @@
                 <option value="">Tất cả NCC</option>
               </select>
               <div class="table-search">
-                🔍<input type="text" placeholder="Tìm tuyến/kho..." id="searchRoute" oninput="renderScheduleTable()">
+                🔍<input type="text" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Tìm tuyến/kho..." id="searchRoute" oninput="renderScheduleTable()">
               </div>
             </div>
           </div>
@@ -622,7 +622,7 @@
                 <option value="done">Hoàn thành</option>
               </select>
               <div class="table-search">
-                🔍<input type="text" placeholder="Tìm biển số..." id="searchBTBD" oninput="renderBTBDTable()">
+                🔍<input type="text" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Tìm biển số..." id="searchBTBD" oninput="renderBTBDTable()">
               </div>
             </div>
           </div>
@@ -675,7 +675,7 @@
                 <option value="">Tất cả chức danh</option>
               </select>
               <div class="table-search">
-                🔍<input type="text" placeholder="Tìm tên/MSNV..." id="searchDriver" oninput="renderStaffTable()">
+                🔍<input type="text" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Tìm tên/MSNV..." id="searchDriver" oninput="renderStaffTable()">
               </div>
             </div>
           </div>
@@ -743,10 +743,14 @@
         <div class="table-card">
           <div class="table-header">
             <h3>🕐 Tỷ lệ đáp ứng theo ca trực</h3>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <button class="reinf-shift-btn" data-sm="day" onclick="setReinfShiftMode('day')">Ngày</button>
+              <button class="reinf-shift-btn" data-sm="week" onclick="setReinfShiftMode('week')">Tuần</button>
+              <button class="reinf-shift-btn" data-sm="month" onclick="setReinfShiftMode('month')">Tháng</button>
+              <button class="reinf-shift-btn" data-sm="year" onclick="setReinfShiftMode('year')">Năm</button>
               <button class="reinf-shift-btn" data-sm="all" onclick="setReinfShiftMode('all')">Toàn kỳ</button>
-              <button class="reinf-shift-btn" data-sm="m3" onclick="setReinfShiftMode('m3')">3 tháng gần nhất</button>
-              <button class="reinf-shift-btn" data-sm="m1" onclick="setReinfShiftMode('m1')">Tháng này</button>
+              <select class="filter-select" id="reinfShiftKey" onchange="setReinfShiftKey(this.value)"
+                style="min-width:190px"></select>
             </div>
           </div>
           <div style="overflow-x:auto">
@@ -770,6 +774,7 @@
           <div style="font-size:11px;color:var(--text-muted);padding:8px 4px 0" id="reinfShiftNote">
             Ca xác định theo GIỜ CẦN XE ở cột "Ngày mong muốn". Ca 1: 07:00–15:00 · Ca 2: 15:00–23:00 · Ca 3: 23:00–07:00.
             Tỷ trọng hụt xe = phần đóng góp của ca đó vào tổng số vụ "Không có xe" — so với cột Tỷ trọng YC để biết ca nào hụt vượt mức.
+            Chọn Ngày/Tuần/Tháng/Năm rồi dùng ô bên cạnh để xem kỳ cụ thể; biểu đồ xu hướng bên dưới cũng đổi theo đơn vị đang chọn.
           </div>
         </div>
 
@@ -795,7 +800,7 @@
                 <option value="">Tất cả NCC</option>
               </select>
               <div class="table-search">
-                🔍<input type="text" placeholder="Tìm ticket/BC..." id="searchReinf"
+                🔍<input type="text" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Tìm ticket/BC..." id="searchReinf"
                   oninput="renderReinforcementTable()">
               </div>
             </div>

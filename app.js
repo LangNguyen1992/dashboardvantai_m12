@@ -1098,7 +1098,8 @@ function renderReinforcementTable() {
  * dữ liệu), dự phòng cột "Giờ tới". Mốc ca theo lịch trực GSVT cụm M12:
  *   Ca 1: 07:00–15:00 | Ca 2: 15:00–23:00 | Ca 3: 23:00–07:00
  * ==========================================================================*/
-window._reinfShiftMode = window._reinfShiftMode || 'all';
+window._reinfShiftMode = window._reinfShiftMode || 'month';   // day | week | month | year | all
+window._reinfShiftKey = window._reinfShiftKey || null;        // null = kỳ mới nhất
 
 var REINF_SHIFTS = [
   { id: 1, name: 'Ca 1', range: '07:00–15:00', color: '#0891b2' },
@@ -1106,7 +1107,37 @@ var REINF_SHIFTS = [
   { id: 3, name: 'Ca 3', range: '23:00–07:00', color: '#8b5cf6' }
 ];
 
-function setReinfShiftMode(m) { window._reinfShiftMode = m; renderReinfShift(); }
+function setReinfShiftMode(m) {
+  window._reinfShiftMode = m;
+  window._reinfShiftKey = null;      // đổi đơn vị thì nhảy về kỳ mới nhất
+  renderReinfShift();
+}
+
+function setReinfShiftKey(k) { window._reinfShiftKey = k || null; renderReinfShift(); }
+
+// Quy một ngày về khóa kỳ + nhãn hiển thị, theo đơn vị đang chọn.
+function reinfPeriodOf(d, gran) {
+  var p2 = function (n) { return ('0' + n).slice(-2); };
+  var Y = d.getFullYear(), M = d.getMonth() + 1, D = d.getDate();
+  if (gran === 'day') {
+    return { key: Y + '-' + p2(M) + '-' + p2(D), label: p2(D) + '/' + p2(M) + '/' + Y, sort: d.getTime() };
+  }
+  if (gran === 'week') {
+    var iw = reinfISOWeek(d);
+    var mon = new Date(d); mon.setDate(D - ((d.getDay() || 7) - 1));
+    var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return {
+      key: iw.year + '-W' + p2(iw.week),
+      label: 'Tuần ' + p2(iw.week) + ' (' + p2(mon.getDate()) + '/' + p2(mon.getMonth() + 1) +
+             '–' + p2(sun.getDate()) + '/' + p2(sun.getMonth() + 1) + ')',
+      sort: mon.getTime()
+    };
+  }
+  if (gran === 'year') {
+    return { key: String(Y), label: 'Năm ' + Y, sort: new Date(Y, 0, 1).getTime() };
+  }
+  return { key: Y + '-' + p2(M), label: 'Tháng ' + p2(M) + '/' + Y, sort: new Date(Y, M - 1, 1).getTime() };
+}
 
 function reinfHourOf(x) {
   var m = String(x.requestDate == null ? '' : x.requestDate).match(/(\d{1,2}):(\d{2})\s*$/);
@@ -1133,20 +1164,23 @@ function reinfStatusKind(s) {
   return 'other';
 }
 
-// Trả về toàn bộ bản ghi đã gắn ca + ngày; lọc theo mốc thời gian đang chọn.
-function reinfShiftRows(ignoreMode) {
-  var all = (DATA.reinforcement || []).map(function (x) {
+// Toàn bộ bản ghi đã gắn ca + ngày (chưa lọc kỳ).
+function reinfShiftRows() {
+  return (DATA.reinforcement || []).map(function (x) {
     var h = reinfHourOf(x);
     return { h: h, s: reinfShiftOf(h), d: reinfDateOf(x), k: reinfStatusKind(x.status) };
   }).filter(function (r) { return r.s && r.d && !isNaN(r.d); });
+}
 
-  var mode = window._reinfShiftMode;
-  if (ignoreMode || mode === 'all' || !all.length) return all;
-  var max = all[0].d;
-  all.forEach(function (r) { if (r.d > max) max = r.d; });
-  var back = (mode === 'm3') ? 2 : 0;
-  var from = new Date(max.getFullYear(), max.getMonth() - back, 1);
-  return all.filter(function (r) { return r.d >= from; });
+// Danh sách kỳ có dữ liệu, mới nhất trước.
+function reinfShiftPeriods(all, gran) {
+  var map = {};
+  all.forEach(function (r) {
+    var p = reinfPeriodOf(r.d, gran);
+    if (!map[p.key]) map[p.key] = p;
+  });
+  return Object.keys(map).map(function (k) { return map[k]; })
+    .sort(function (a, b) { return b.sort - a.sort; });
 }
 
 function reinfAgg(rows) {
@@ -1176,16 +1210,43 @@ function renderReinfShift() {
   var body = document.getElementById('reinfShiftBody');
   if (!body) return;
 
-  var mode = window._reinfShiftMode;
+  var gran = window._reinfShiftMode;
   document.querySelectorAll('.reinf-shift-btn').forEach(function (b) {
-    var on = b.dataset.sm === mode;
+    var on = b.dataset.sm === gran;
     b.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;font-weight:' +
       (on ? '700;background:var(--accent);color:#fff' : '400;background:var(--bg-card);color:var(--text-secondary)');
   });
 
-  var rows = reinfShiftRows();
-  if (!rows.length) {
+  var all = reinfShiftRows();
+  var sel = document.getElementById('reinfShiftKey');
+
+  if (!all.length) {
     body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Chưa có dữ liệu</td></tr>';
+    if (sel) { sel.innerHTML = ''; sel.style.display = 'none'; }
+    return;
+  }
+
+  // Ô chọn kỳ cụ thể (ẩn khi đang xem Toàn kỳ)
+  var rows = all;
+  if (gran === 'all') {
+    if (sel) sel.style.display = 'none';
+  } else {
+    var ds = reinfShiftPeriods(all, gran);
+    var cur = window._reinfShiftKey;
+    if (!cur || !ds.filter(function (p) { return p.key === cur; }).length) {
+      cur = ds[0].key; window._reinfShiftKey = cur;
+    }
+    if (sel) {
+      sel.style.display = '';
+      sel.innerHTML = ds.map(function (p) {
+        return '<option value="' + p.key + '"' + (p.key === cur ? ' selected' : '') + '>' + escapeHTML(p.label) + '</option>';
+      }).join('');
+    }
+    rows = all.filter(function (r) { return reinfPeriodOf(r.d, gran).key === cur; });
+  }
+
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Kỳ này chưa có yêu cầu nào</td></tr>';
     return;
   }
 
@@ -1223,28 +1284,34 @@ function renderReinfShift() {
 }
 
 function renderReinfShiftCharts(rows) {
-  // --- Biểu đồ 1: xu hướng % đáp ứng theo tháng, tách 3 ca (luôn lấy TOÀN BỘ lịch sử) ---
-  var full = reinfShiftRows(true);
-  var keys = {};
+  // --- Biểu đồ 1: xu hướng % đáp ứng theo 3 ca, đơn vị thời gian theo nút đang chọn ---
+  var gran = window._reinfShiftMode;
+  if (gran === 'all') gran = 'month';           // Toàn kỳ -> vẽ theo tháng cho dễ đọc
+  var full = reinfShiftRows();
+  var LIMIT = { day: 30, week: 26, month: 24, year: 10 }[gran] || 24;
+  var ps = reinfShiftPeriods(full, gran).slice(0, LIMIT).reverse();   // cũ -> mới
+  var labels = ps.map(function (p) { return p.label; });
+
+  // Gom sẵn theo (kỳ, ca) một lượt thay vì lọc lại mảng cho từng điểm
+  var bucket = {};
   full.forEach(function (r) {
-    keys[r.d.getFullYear() + '-' + ('0' + (r.d.getMonth() + 1)).slice(-2)] = 1;
+    var k = reinfPeriodOf(r.d, gran).key + '|' + r.s;
+    (bucket[k] || (bucket[k] = [])).push(r);
   });
-  var months = Object.keys(keys).sort();
+
   var ds = REINF_SHIFTS.map(function (sh) {
     return {
       label: sh.name, borderColor: sh.color, backgroundColor: sh.color,
       tension: 0.3, spanGaps: true, pointRadius: 3,
-      data: months.map(function (mk) {
-        var a = reinfAgg(full.filter(function (r) {
-          return r.s === sh.id && (r.d.getFullYear() + '-' + ('0' + (r.d.getMonth() + 1)).slice(-2)) === mk;
-        }));
+      data: ps.map(function (p) {
+        var a = reinfAgg(bucket[p.key + '|' + sh.id] || []);
         return a.need >= 5 ? +a.rate.toFixed(1) : null;   // dưới 5 nhu cầu thì tỷ lệ không có ý nghĩa
       })
     };
   });
   reinfChart('chartReinfShiftTrend', {
     type: 'line',
-    data: { labels: months, datasets: ds },
+    data: { labels: labels, datasets: ds },
     options: {
       responsive: true,
       plugins: {
@@ -2271,6 +2338,16 @@ function handleExcelUpload(event) {
 
 // === INIT ===
 document.addEventListener('DOMContentLoaded', () => {
+  // Chrome tự điền email đã lưu ở form đăng nhập vào các ô tìm kiếm -> bảng bị lọc
+  // sạch mà người dùng không hiểu vì sao. Dọn sạch ô tìm kiếm mỗi lần mở trang.
+  var donOTimKiem = function () {
+    document.querySelectorAll('.table-search input').forEach(function (o) {
+      if (o.value) { o.value = ''; }
+    });
+  };
+  donOTimKiem();
+  setTimeout(donOTimKiem, 400);   // Chrome điền trễ sau khi trang dựng xong
+
   loadCachedFullData();
   renderDashboard();
   renderDashboardCharts();
